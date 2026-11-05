@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: deskdo
+          POSTGRES_PASSWORD: deskdo
+          POSTGRES_DB: deskdo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U deskdo" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://deskdo:deskdo@localhost:5432/deskdo_test
+      E2E_DATABASE_URL: postgres://deskdo:deskdo@localhost:5432/deskdo_test
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @deskdo/mobile build && pnpm --filter @deskdo/server build
+      - run: npm i -g playwright@1 && npx playwright install --with-deps chromium
+      - run: NODE_PATH=$(npm root -g) pnpm e2e
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @deskdo/desktop test
+      - run: pnpm dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeskDo-Setup
+          path: packages/desktop/release/DeskDo-Setup-*.exe

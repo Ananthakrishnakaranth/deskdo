@@ -1,0 +1,127 @@
+/* Shared look for the desktop widget and the PWA. Dark, translucent, readable on dark wallpapers. */
+.dd-card {
+  --dd-bg: rgba(18, 20, 26, 0.72);
+  --dd-border: rgba(255, 255, 255, 0.10);
+  --dd-text: #eef0f4;
+  --dd-muted: rgba(238, 240, 244, 0.55);
+  --dd-row-hover: rgba(255, 255, 255, 0.06);
+  --dd-accent: #7aa7ff;
+  --dd-danger: #ff7a7a;
+  --dd-radius: 14px;
+  --dd-row-h: 34px;
+  --dd-font: 13.5px;
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  color: var(--dd-text);
+  background: var(--dd-bg);
+  border: 1px solid var(--dd-border);
+  border-radius: var(--dd-radius);
+  font: var(--dd-font) / 1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  /* Keep text legible over busy wallpaper. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.dd-card *, .dd-card *::before, .dd-card *::after { box-sizing: border-box; }
+:where(.dd-card) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.dd-card :focus-visible { outline: 2px solid var(--dd-accent); outline-offset: 1px; border-radius: 6px; }
+
+.dd-mobile { --dd-row-h: 52px; --dd-font: 16.5px; --dd-radius: 18px; --dd-bg: rgba(18, 20, 26, 0.92); }
+
+/* Header */
+.dd-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px 14px; min-height: 40px; }
+.dd-title { margin: 0; font-size: 1em; font-weight: 600; letter-spacing: 0.02em; flex: 0 1 auto; }
+.dd-count { color: var(--dd-muted); font-size: 0.85em; font-variant-numeric: tabular-nums; }
+.dd-header-extra { margin-left: auto; display: flex; gap: 2px; align-items: center; }
+.dd-status { width: 7px; height: 7px; border-radius: 50%; background: var(--dd-muted); flex: none; }
+.dd-status-online { background: #5fd38d; }
+.dd-status-offline, .dd-status-unauthorized { background: #f0b45a; }
+.dd-status-connecting { background: #8ab4ff; animation: dd-pulse 1.2s ease-in-out infinite; }
+@keyframes dd-pulse { 50% { opacity: 0.35; } }
+
+.dd-icon-btn { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--dd-muted); }
+.dd-icon-btn:hover { background: var(--dd-row-hover); color: var(--dd-text); }
+.dd-icon-btn svg { width: 15px; height: 15px; }
+.dd-mobile .dd-icon-btn { width: 44px; height: 44px; }
+.dd-mobile .dd-icon-btn svg { width: 22px; height: 22px; }
+
+.dd-error {
+  display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 6px 6px 6px 10px;
+  background: rgba(255, 122, 122, 0.16); border: 1px solid rgba(255, 122, 122, 0.35); border-radius: 9px; font-size: 0.9em;
+}
+.dd-error span { flex: 1; }
+
+/* List */
+.dd-list { list-style: none; margin: 0; padding: 2px 6px; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+.dd-empty { color: var(--dd-muted); padding: 14px 10px; text-align: center; font-size: 0.92em; }
+.dd-row {
+  position: relative; display: flex; align-items: center; gap: 6px; min-height: var(--dd-row-h);
+  padding: 2px 4px; border-radius: 9px; background: transparent;
+}
+.dd-row:hover { background: var(--dd-row-hover); }
+.dd-dragging { background: rgba(40, 44, 54, 0.95) !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); z-index: 2; }
+
+.dd-handle {
+  flex: none; width: 14px; height: 24px; display: grid; place-items: center; color: var(--dd-muted);
+  opacity: 0; cursor: grab; touch-action: none; transition: opacity 0.12s;
+}
+.dd-handle svg { width: 8px; height: 14px; fill: currentColor; }
+.dd-row:hover .dd-handle, .dd-handle:focus-visible, .dd-dragging .dd-handle { opacity: 1; }
+.dd-mobile .dd-handle { opacity: 0.7; width: 32px; height: 44px; }
+.dd-mobile .dd-handle svg { width: 10px; height: 18px; }
+
+.dd-check {
+  flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1.6px solid rgba(238, 240, 244, 0.6);
+  display: grid; place-items: center; color: #10131a;
+}
+.dd-check svg { width: 13px; height: 13px; }
+.dd-done .dd-check { background: var(--dd-accent); border-color: var(--dd-accent); }
+.dd-mobile .dd-check { width: 28px; height: 28px; border-radius: 8px; margin: 0 4px; }
+.dd-mobile .dd-check svg { width: 20px; height: 20px; }
+/* Bigger invisible hit area for the checkbox on touch screens. */
+.dd-mobile .dd-check { position: relative; }
+.dd-mobile .dd-check::after { content: ""; position: absolute; inset: -9px; }
+
+.dd-text {
+  flex: 1 1 auto; min-width: 0; padding: 4px 4px; cursor: text; overflow-wrap: anywhere;
+  border-radius: 6px; transition: opacity 0.15s;
+}
+.dd-done .dd-text { text-decoration: line-through; opacity: 0.45; }
+.dd-mobile .dd-text { padding: 10px 4px; }
+
+.dd-edit, .dd-add-input {
+  flex: 1 1 auto; min-width: 0; font: inherit; color: var(--dd-text);
+  background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 7px;
+  padding: 4px 8px; outline: none;
+}
+.dd-edit:focus, .dd-add-input:focus { border-color: var(--dd-accent); background: rgba(255, 255, 255, 0.11); }
+.dd-mobile .dd-edit, .dd-mobile .dd-add-input { padding: 10px 12px; font-size: 16.5px; /* >=16px stops iOS zoom */ }
+
+.dd-delete {
+  flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  color: var(--dd-muted); opacity: 0; transition: opacity 0.12s;
+}
+.dd-delete svg { width: 13px; height: 13px; }
+.dd-row:hover .dd-delete, .dd-delete:focus-visible { opacity: 1; }
+.dd-delete:hover { color: var(--dd-danger); background: rgba(255, 122, 122, 0.12); }
+/* No hover on touch screens: always show, and make it a proper 44px target. */
+.dd-mobile .dd-delete { opacity: 0.75; width: 44px; height: 44px; }
+.dd-mobile .dd-delete svg { width: 18px; height: 18px; }
+
+/* Footer */
+.dd-footer { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 10px; border-top: 1px solid var(--dd-border); }
+.dd-add { display: flex; gap: 6px; }
+.dd-add-input::placeholder { color: var(--dd-muted); }
+.dd-add-input.dd-full::placeholder { color: #f0b45a; }
+.dd-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dd-add-btn { flex: none; width: 30px; border-radius: 7px; background: rgba(122, 167, 255, 0.2); font-size: 1.15em; line-height: 1; }
+.dd-add-btn:disabled { opacity: 0.35; cursor: default; }
+.dd-mobile .dd-add-btn { width: 48px; }
+.dd-link-btn { align-self: flex-end; color: var(--dd-muted); font-size: 0.85em; padding: 2px 4px; border-radius: 6px; }
+.dd-link-btn:hover { color: var(--dd-text); }
+.dd-mobile .dd-link-btn { padding: 10px 8px; font-size: 0.9em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-card * { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,42 @@
+:root { color-scheme: dark; }
+html, body { margin: 0; min-height: 100%; background: #0e1015; }
+body {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.app {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  /* Respect notches / home indicator when installed (viewport-fit=cover). */
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.app .dd-card { flex: 0 1 auto; }
+.sheet {
+  background: rgba(18, 20, 26, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 16px;
+  color: #eef0f4;
+}
+.login { display: flex; flex-direction: column; gap: 12px; }
+.login h2 { margin: 0; font-size: 18px; }
+.login .hint { margin: 0; color: rgba(238, 240, 244, 0.6); font-size: 14px; }
+.login label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: rgba(238, 240, 244, 0.75); }
+.login input {
+  font: inherit; font-size: 16.5px; color: #eef0f4; padding: 12px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); outline: none;
+}
+.login input:focus { border-color: #7aa7ff; }
+.login button {
+  font: inherit; font-size: 16px; font-weight: 600; min-height: 48px; border-radius: 12px; border: 0;
+  background: #7aa7ff; color: #0e1015; cursor: pointer;
+}
+.login button:disabled { opacity: 0.6; }
+.login .err { margin: 0; color: #ff9c9c; font-size: 14px; }
+.boot-error { color: #ff9c9c; padding: 24px; font-family: system-ui, sans-serif; }

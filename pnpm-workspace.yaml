@@ -1,0 +1,11 @@
+packages:
+  - "packages/*"
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - koffi
+# Also fetch Windows x64 binaries of optional native deps (@napi-rs/keyring) so the installer can be
+# built from CI or another OS and still contain the Windows build.
+supportedArchitectures:
+  os: [current, win32]
+  cpu: [current, x64]

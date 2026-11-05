@@ -1,0 +1,39 @@
+html, body, #root { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+body { user-select: none; }
+.widget { position: relative; height: 100%; padding: 1px; box-sizing: border-box; }
+.widget .dd-card { height: 100%; }
+.dd-text, input { user-select: text; }
+
+/* Frameless window: the header is the drag handle. Interactive children opt out. */
+.drag-region { -webkit-app-region: drag; cursor: default; }
+.drag-region button, .no-drag { -webkit-app-region: no-drag; }
+
+.resize-grip {
+  position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 0 55%, rgba(255,255,255,0.28) 55% 62%, transparent 62% 74%, rgba(255,255,255,0.28) 74% 81%, transparent 81%);
+  border-bottom-right-radius: 12px;
+}
+
+.settings {
+  position: absolute; inset: 1px; overflow-y: auto; padding: 12px 14px; box-sizing: border-box;
+  background: rgb(20, 22, 28); border-radius: 14px; border: 1px solid rgba(255,255,255,0.1);
+  color: #eef0f4; font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings h2 { margin: 0; font-size: 14px; }
+.settings-section { display: flex; flex-direction: column; gap: 8px; }
+.settings p { margin: 0; overflow-wrap: anywhere; }
+.settings label { display: flex; flex-direction: column; gap: 4px; color: rgba(238,240,244,0.75); }
+.settings input:not([type="checkbox"]) {
+  font: inherit; color: #eef0f4; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 7px; padding: 6px 8px; outline: none;
+}
+.settings input:focus { border-color: #7aa7ff; }
+.settings .toggle { flex-direction: row; align-items: center; gap: 8px; color: #eef0f4; }
+.settings .hint { color: rgba(238,240,244,0.5); font-size: 12px; }
+.settings .warn { color: #f0b45a; }
+.btn { font: inherit; color: #eef0f4; background: rgba(255,255,255,0.1); border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; }
+.btn.primary { background: #7aa7ff; color: #0e1015; font-weight: 600; }
+.btn:disabled { opacity: 0.6; }
+.settings .dd-icon-btn { width: 26px; height: 26px; border-radius: 7px; background: none; border: 0; color: rgba(238,240,244,0.6); cursor: pointer; font-size: 18px; }

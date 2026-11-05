@@ -1,0 +1,25 @@
+{
+  "name": "deskdo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Windows 11 desktop to-do widget + PWA, synced in real time through a Postgres-backed server",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "icons": "node scripts/gen-icons.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "build": "pnpm --filter @deskdo/mobile build && pnpm --filter @deskdo/server build && pnpm --filter @deskdo/desktop build",
+    "dev:server": "pnpm --filter @deskdo/server dev",
+    "dev:mobile": "pnpm --filter @deskdo/mobile dev",
+    "dev:desktop": "pnpm --filter @deskdo/desktop dev",
+    "dist:win": "pnpm --filter @deskdo/desktop dist:win",
+    "e2e": "node e2e/sync-e2e.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "esbuild", "@napi-rs/keyring", "koffi"]
+  }
+}

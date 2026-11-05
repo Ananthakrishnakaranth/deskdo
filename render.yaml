@@ -1,0 +1,35 @@
+# Render Blueprint: one free web service that serves the API, the WebSocket and the PWA.
+# Postgres lives on Neon's free tier (Render's free Postgres is deleted after 30 days).
+services:
+  - type: web
+    name: deskdo
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: >-
+      corepack enable &&
+      pnpm install --frozen-lockfile --filter @deskdo/server... --filter @deskdo/mobile... &&
+      pnpm --filter @deskdo/mobile build &&
+      pnpm --filter @deskdo/server build
+    startCommand: node packages/server/dist/server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      - key: STATIC_DIR
+        value: packages/mobile/dist
+      - key: DATABASE_SSL
+        value: "true"
+      - key: TOKEN_TTL_DAYS
+        value: "90"
+      - key: JWT_SECRET
+        generateValue: true
+      # Set these three in the Render dashboard (never commit them):
+      - key: DATABASE_URL
+        sync: false
+      - key: ACCOUNT_EMAIL
+        sync: false
+      - key: ACCOUNT_PASSWORD_HASH
+        sync: false
