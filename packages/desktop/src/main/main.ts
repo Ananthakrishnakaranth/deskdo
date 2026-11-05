@@ -14,6 +14,12 @@ const resources = path.join(app.getAppPath(), "resources");
 // ---- memory: this is a small, mostly static UI. Software rendering avoids a GPU process (~40-60 MB)
 // and transparent windows still work on Windows without it.
 app.disableHardwareAcceleration();
+// The widget lives at the bottom of the Z-order, so Windows reports it as covered most of the time.
+// Chromium then deprioritises "occluded"/background renderers, which stretched the sync handshake
+// past the server's deadline. Keep the renderer running at normal priority.
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-background-timer-throttling");
 // Favour a small heap over peak JS speed; the UI does very little work.
 app.commandLine.appendSwitch("js-flags", "--optimize-for-size --max-old-space-size=96");
 // No spellcheck dictionaries, no background networking we don't use.

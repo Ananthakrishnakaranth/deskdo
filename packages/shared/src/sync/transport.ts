@@ -67,57 +67,70 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
     openLive(handlers) {
       let closed = false;
       let opened = false;
+      let ws: WebSocket | null = null;
       let idleTimer: ReturnType<typeof setTimeout> | undefined;
-      const ws = new WebSocket(wsUrl());
-      // A stalled handshake (proxy, antivirus, captive portal) would otherwise sit in CONNECTING for
-      // minutes without ever firing close.
-      const connectTimer = setTimeout(() => {
-        if (!opened) ws.close();
-      }, connectTimeoutMs);
+      let connectTimer: ReturnType<typeof setTimeout> | undefined;
+
+      const finish = (unauthorized: boolean) => {
+        clearTimeout(idleTimer);
+        clearTimeout(connectTimer);
+        if (closed) return;
+        closed = true;
+        handlers.onClose({ unauthorized });
+      };
 
       const resetIdle = () => {
         clearTimeout(idleTimer);
         // Half-open sockets (e.g. Wi-Fi dropped) never fire `close` on their own; the server pings
         // every 25s, so silence means the connection is dead.
-        idleTimer = setTimeout(() => ws.close(), idleTimeoutMs);
+        idleTimer = setTimeout(() => ws?.close(), idleTimeoutMs);
       };
 
-      ws.onopen = async () => {
-        resetIdle();
+      const start = async () => {
+        // Fetch the token *before* connecting, so the auth message goes out the instant the socket
+        // opens. (Awaiting it inside onopen added a round trip that a throttled page could stretch
+        // past the server's auth deadline.)
         const token = opts.getToken ? await opts.getToken() : null;
-        if (token && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "auth", token }));
-      };
-      ws.onmessage = (ev) => {
-        resetIdle();
-        let msg: ServerMessage;
-        try {
-          msg = JSON.parse(String(ev.data)) as ServerMessage;
-        } catch {
-          return;
-        }
-        if (msg.type === "hello" && !opened) {
-          opened = true;
-          clearTimeout(connectTimer);
-          handlers.onOpen();
-        }
-        handlers.onMessage(msg);
-      };
-      ws.onclose = (ev) => {
-        clearTimeout(idleTimer);
-        clearTimeout(connectTimer);
         if (closed) return;
-        closed = true;
-        handlers.onClose({ unauthorized: ev.code === WS_CLOSE_UNAUTHORIZED });
+        const socket = new WebSocket(wsUrl());
+        ws = socket;
+        // A stalled handshake (proxy, antivirus, captive portal) would otherwise sit in CONNECTING
+        // for minutes without ever firing close.
+        connectTimer = setTimeout(() => {
+          if (!opened) socket.close();
+        }, connectTimeoutMs);
+        socket.onopen = () => {
+          resetIdle();
+          if (token) socket.send(JSON.stringify({ type: "auth", token }));
+        };
+        socket.onmessage = (ev) => {
+          resetIdle();
+          let msg: ServerMessage;
+          try {
+            msg = JSON.parse(String(ev.data)) as ServerMessage;
+          } catch {
+            return;
+          }
+          if (msg.type === "hello" && !opened) {
+            opened = true;
+            clearTimeout(connectTimer);
+            handlers.onOpen();
+          }
+          handlers.onMessage(msg);
+        };
+        socket.onclose = (ev) => finish(ev.code === WS_CLOSE_UNAUTHORIZED);
+        socket.onerror = () => {
+          /* followed by onclose */
+        };
       };
-      ws.onerror = () => {
-        /* followed by onclose */
-      };
+      start().catch(() => finish(false));
+
       return {
         close() {
           closed = true;
           clearTimeout(idleTimer);
           clearTimeout(connectTimer);
-          ws.close();
+          ws?.close();
         },
       };
     },
