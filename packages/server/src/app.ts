@@ -160,24 +160,39 @@ export function createApp(cfg: Config, db: Db): App {
   });
 
   async function onSocket(ws: WebSocket, req: IncomingMessage): Promise<void> {
-    const reject = () => ws.close(WS_CLOSE_UNAUTHORIZED, "unauthorized");
+    // Connection diagnostics (never logs tokens): which auth path, which client, how it ended.
+    const client = describeClient(req);
+    const started = Date.now();
+    const log = (event: string) => console.log(`ws ${event} client=${client} after=${Date.now() - started}ms`);
+    ws.on("close", (code) => log(`closed code=${code}`));
+    const reject = (reason: string) => {
+      log(`rejected reason=${reason}`);
+      ws.close(WS_CLOSE_UNAUTHORIZED, "unauthorized");
+    };
+    const accept = async () => {
+      hub.add(ws, (await changesSince(db, Number.MAX_SAFE_INTEGER)).cursor);
+      log(`ready clients=${hub.size}`);
+    };
     const { token, via } = auth.tokenFrom(req);
+    log(`open via=${via ?? "first-message"}`);
     if (via === "cookie") {
       // Cross-site WebSocket hijacking defence: cookies are ambient, so check Origin.
-      if (!originAllowed(req) || !(await auth.verify(token))) return reject();
-      return hub.add(ws, (await changesSince(db, Number.MAX_SAFE_INTEGER)).cursor);
+      if (!originAllowed(req)) return reject("origin");
+      if (!(await auth.verify(token))) return reject("bad-cookie");
+      return accept();
     }
     // Bearer clients authenticate with their first message (browsers can't set WS headers, and
     // query-string tokens end up in proxy logs).
-    const timer = setTimeout(reject, 5_000);
+    const timer = setTimeout(() => reject("auth-timeout"), 10_000);
     ws.once("message", async (data) => {
       clearTimeout(timer);
       try {
         const msg = JSON.parse(String(data)) as { type?: string; token?: string };
-        if (msg.type !== "auth" || !(await auth.verify(msg.token))) return reject();
-        hub.add(ws, (await changesSince(db, Number.MAX_SAFE_INTEGER)).cursor);
+        if (msg.type !== "auth") return reject("first-message-not-auth");
+        if (!(await auth.verify(msg.token))) return reject("bad-token");
+        await accept();
       } catch {
-        reject();
+        reject("bad-message");
       }
     });
   }
@@ -191,6 +206,16 @@ export function createApp(cfg: Config, db: Db): App {
       await new Promise<void>((r) => server.close(() => r()));
     },
   };
+}
+
+/** Short, non-identifying client label for logs: "desktop", "android", "browser", or "other". */
+function describeClient(req: IncomingMessage): string {
+  const ua = String(req.headers["user-agent"] ?? "");
+  if (/Electron|DeskDo/i.test(ua)) return "desktop";
+  if (/; wv\)/.test(ua)) return "android-app";
+  if (/Android|iPhone|iPad/.test(ua)) return "mobile-browser";
+  if (/Mozilla/.test(ua)) return "browser";
+  return "other";
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

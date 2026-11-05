@@ -88,7 +88,9 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       nodeIntegration: false,
       spellcheck: false,
-      backgroundThrottling: true,
+      // The widget usually sits behind other windows; Chromium treats covered windows as hidden and
+      // throttles their timers, which would delay reconnects and polling. Keep it running normally.
+      backgroundThrottling: false,
       devTools: isDev,
     },
   });

@@ -38,6 +38,8 @@ export interface EngineOptions {
   minBackoffMs?: number;
   maxBackoffMs?: number;
   pushBatchSize?: number;
+  /** HTTP polling interval used while the WebSocket is unavailable (ms). */
+  pollIntervalMs?: number;
 }
 
 export const LIMIT_MESSAGE = `List is full: at most ${MAX_ACTIVE_ITEMS} open tasks. Finish or delete one first.`;
@@ -74,6 +76,7 @@ export class SyncEngine {
   private readonly minBackoff: number;
   private readonly maxBackoff: number;
   private readonly batchSize: number;
+  private readonly pollIntervalMs: number;
 
   constructor(private readonly store: LocalStore, opts: EngineOptions = {}) {
     this.newId = opts.newId ?? (() => crypto.randomUUID());
@@ -81,6 +84,7 @@ export class SyncEngine {
     this.minBackoff = opts.minBackoffMs ?? 1_000;
     this.maxBackoff = opts.maxBackoffMs ?? 30_000;
     this.batchSize = opts.pushBatchSize ?? 50;
+    this.pollIntervalMs = opts.pollIntervalMs ?? 3_000;
     this.backoff = this.minBackoff;
     this.recompute();
   }
@@ -107,26 +111,40 @@ export class SyncEngine {
   }
 
   // ---------------------------------------------------------------- connection management
+  //
+  // Two channels: the WebSocket (instant push from the server) and plain HTTP. While the WebSocket
+  // is down or can't be established at all (some networks, proxies and antivirus tools block or
+  // stall WebSockets), the engine keeps syncing by polling over HTTP, so changes still flow within
+  // a few seconds instead of the client sitting in "connecting" forever.
+
+  private wsReady = false;
+  private wsConnecting = false;
+  private httpReady = false;
+  private unauthorized = false;
+  private pollTimer: ReturnType<typeof setInterval> | undefined;
+  private polling = false;
 
   /** Attach a transport (signed in) or detach it (`null`, signed out / local-only). */
   setTransport(t: SyncTransport | null): void {
     this.live?.close();
     this.live = null;
     clearTimeout(this.reconnectTimer);
+    this.stopPolling();
     this.transport = t;
     this.backoff = this.minBackoff;
+    this.wsReady = this.wsConnecting = this.httpReady = this.unauthorized = false;
     if (!t) {
-      this.setStatus("local");
+      this.updateStatus();
       return;
     }
     this.connect();
   }
 
-  /** Reconnect now (e.g. browser `online` event, app returned to foreground). */
+  /** Reconnect now (e.g. browser `online` event, app returned to foreground, laptop woke up). */
   kick(): void {
-    if (!this.transport || this.status === "unauthorized") return;
-    if (this.live && this.status === "online") {
-      void this.flush();
+    if (!this.transport || this.unauthorized) return;
+    if (this.wsReady) {
+      void this.flush().then(() => this.pull());
       return;
     }
     clearTimeout(this.reconnectTimer);
@@ -136,17 +154,20 @@ export class SyncEngine {
 
   /** Signals the network is gone (browser `offline` event) so the UI updates immediately. */
   markOffline(): void {
-    if (!this.transport || this.status === "unauthorized") return;
+    if (!this.transport || this.unauthorized) return;
     this.live?.close();
     this.live = null;
-    this.setStatus("offline");
+    this.wsReady = this.wsConnecting = this.httpReady = false;
+    this.updateStatus();
     this.scheduleReconnect();
+    this.startPolling();
   }
 
   dispose(): void {
     this.live?.close();
     this.live = null;
     clearTimeout(this.reconnectTimer);
+    this.stopPolling();
     this.transport = null;
     this.listeners.clear();
   }
@@ -155,12 +176,18 @@ export class SyncEngine {
     const t = this.transport;
     if (!t) return;
     this.live?.close();
-    this.setStatus("connecting");
+    this.wsReady = false;
+    this.wsConnecting = true;
+    this.updateStatus();
+    this.startPolling(); // keeps data moving until (and unless) the WebSocket comes up
     const conn = t.openLive({
       onOpen: () => {
-        if (this.transport !== t) return;
+        if (this.transport !== t || this.live !== conn) return;
         this.backoff = this.minBackoff;
-        this.setStatus("online");
+        this.wsReady = true;
+        this.wsConnecting = false;
+        this.stopPolling();
+        this.updateStatus();
         // Replay the outbox first, then catch up on everything we missed.
         void this.flush().then(() => this.pull());
       },
@@ -172,12 +199,11 @@ export class SyncEngine {
       onClose: ({ unauthorized }) => {
         if (this.transport !== t || this.live !== conn) return;
         this.live = null;
-        if (unauthorized) {
-          this.setStatus("unauthorized");
-          return;
-        }
-        this.setStatus("offline");
+        this.wsReady = this.wsConnecting = false;
+        if (unauthorized) return this.setUnauthorized();
+        this.updateStatus();
         this.scheduleReconnect();
+        this.startPolling();
       },
     });
     this.live = conn;
@@ -190,21 +216,83 @@ export class SyncEngine {
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 
+  private startPolling(): void {
+    if (this.pollTimer || !this.transport || this.unauthorized) return;
+    this.pollTimer = setInterval(() => void this.pollOnce(), this.pollIntervalMs);
+    void this.pollOnce();
+  }
+
+  private stopPolling(): void {
+    clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
+    this.httpReady = false;
+  }
+
+  /** One HTTP round trip: pull what changed, then push the outbox. */
+  private async pollOnce(): Promise<void> {
+    const t = this.transport;
+    if (!t || this.wsReady || this.polling || this.unauthorized) return;
+    this.polling = true;
+    try {
+      const res = await t.pull(this.cursor);
+      if (this.transport !== t || this.wsReady) return;
+      this.applyPull(res);
+      this.httpReady = true;
+      this.updateStatus();
+      await this.flush();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return this.setUnauthorized();
+      this.httpReady = false;
+      this.updateStatus();
+    } finally {
+      this.polling = false;
+    }
+  }
+
   private async pull(): Promise<void> {
     const t = this.transport;
     if (!t) return;
     try {
       const res = await t.pull(this.cursor);
       if (this.transport !== t) return;
-      if (res.reset) {
-        this.confirmed = {};
-        this.cursor = 0;
-      }
-      this.receive(res.items, res.cursor);
-      if (res.reset) this.recompute();
+      this.applyPull(res);
     } catch (e) {
       this.handleTransportError(e);
     }
+  }
+
+  private applyPull(res: { items: TodoItem[]; cursor: number; reset?: boolean }): void {
+    if (res.reset) {
+      this.confirmed = {};
+      this.cursor = 0;
+    }
+    this.receive(res.items, res.cursor);
+    if (res.reset) this.recompute();
+  }
+
+  private setUnauthorized(): void {
+    this.live?.close();
+    this.live = null;
+    clearTimeout(this.reconnectTimer);
+    this.stopPolling();
+    this.wsReady = this.wsConnecting = false;
+    this.unauthorized = true;
+    this.updateStatus();
+  }
+
+  private updateStatus(): void {
+    const s: SyncStatus = !this.transport
+      ? "local"
+      : this.unauthorized
+        ? "unauthorized"
+        : this.wsReady || this.httpReady
+          ? "online"
+          : this.wsConnecting
+            ? "connecting"
+            : "offline";
+    if (this.status === s) return;
+    this.status = s;
+    this.recompute();
   }
 
   // ---------------------------------------------------------------- outbox flushing
@@ -259,19 +347,17 @@ export class SyncEngine {
   }
 
   private handleTransportError(e: unknown): void {
-    if (e instanceof UnauthorizedError) {
+    if (e instanceof UnauthorizedError) return this.setUnauthorized();
+    // Network failure: whichever channel we were relying on is down. Fall back to reconnect + poll.
+    this.httpReady = false;
+    if (this.wsReady) {
       this.live?.close();
       this.live = null;
-      this.setStatus("unauthorized");
-      return;
-    }
-    // Network failure: drop to offline; the reconnect loop will flush again.
-    if (this.status === "online") {
-      this.live?.close();
-      this.live = null;
-      this.setStatus("offline");
+      this.wsReady = false;
       this.scheduleReconnect();
     }
+    this.updateStatus();
+    this.startPolling();
   }
 
   // ---------------------------------------------------------------- incoming changes
@@ -399,12 +485,6 @@ export class SyncEngine {
     this.error = error;
     this.recompute();
     return { ok: false, error };
-  }
-
-  private setStatus(s: SyncStatus): void {
-    if (this.status === s) return;
-    this.status = s;
-    this.recompute();
   }
 
   private recompute(): void {

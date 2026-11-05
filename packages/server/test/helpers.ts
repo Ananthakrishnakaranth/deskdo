@@ -73,6 +73,8 @@ export class MemStore implements LocalStore {
 export class Network {
   online = true;
   loseNextPushResponse = false;
+  /** Simulates a network that stalls WebSockets: the socket never opens, but HTTP works. */
+  blockWebSocket = false;
   private lives = new Set<{ inner: { close(): void }; h: LiveHandlers }>();
 
   wrap(inner: SyncTransport): SyncTransport {
@@ -94,6 +96,7 @@ export class Network {
         return inner.pull(since);
       },
       openLive(h) {
+        if (net.blockWebSocket) return { close() {} }; // hangs in CONNECTING forever
         if (!net.online) {
           setTimeout(() => h.onClose({ unauthorized: false }), 0);
           return { close() {} };
@@ -125,12 +128,13 @@ export interface Device {
   texts(): string[];
 }
 
-export async function device(h: Harness, id: string): Promise<Device> {
+export async function device(h: Harness, id: string, opts: { blockWebSocket?: boolean } = {}): Promise<Device> {
   const token = await login(h.baseUrl, id);
   const store = new MemStore({ deviceId: id, items: [], outbox: [], cursor: 0 });
-  const engine = new SyncEngine(store, { minBackoffMs: 20, maxBackoffMs: 100 });
+  const engine = new SyncEngine(store, { minBackoffMs: 20, maxBackoffMs: 100, pollIntervalMs: 200 });
   await engine.init();
   const net = new Network();
+  net.blockWebSocket = !!opts.blockWebSocket;
   engine.setTransport(net.wrap(createHttpTransport({ baseUrl: h.baseUrl, getToken: async () => token })));
   await waitFor(() => engine.getState().status === "online", 3000, `${id} online`);
   return { engine, net, store, id, texts: () => engine.getState().items.map((i) => i.text) };

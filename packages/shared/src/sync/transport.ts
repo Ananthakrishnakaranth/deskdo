@@ -27,6 +27,8 @@ export interface HttpTransportOptions {
   getToken?: () => Promise<string | null>;
   /** Close the socket if nothing (not even a server ping) arrives for this long. */
   idleTimeoutMs?: number;
+  /** Give up on a connection attempt that hasn't finished (handshake + auth) in this long. */
+  connectTimeoutMs?: number;
 }
 
 /** WebSocket close code the server uses for auth failures. */
@@ -35,6 +37,7 @@ export const WS_CLOSE_UNAUTHORIZED = 4401;
 export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
   const base = opts.baseUrl.replace(/\/+$/, "");
   const idleTimeoutMs = opts.idleTimeoutMs ?? 60_000;
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 15_000;
 
   async function request<T>(path: string, init: RequestInit): Promise<T> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -66,6 +69,11 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
       let opened = false;
       let idleTimer: ReturnType<typeof setTimeout> | undefined;
       const ws = new WebSocket(wsUrl());
+      // A stalled handshake (proxy, antivirus, captive portal) would otherwise sit in CONNECTING for
+      // minutes without ever firing close.
+      const connectTimer = setTimeout(() => {
+        if (!opened) ws.close();
+      }, connectTimeoutMs);
 
       const resetIdle = () => {
         clearTimeout(idleTimer);
@@ -89,12 +97,14 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
         }
         if (msg.type === "hello" && !opened) {
           opened = true;
+          clearTimeout(connectTimer);
           handlers.onOpen();
         }
         handlers.onMessage(msg);
       };
       ws.onclose = (ev) => {
         clearTimeout(idleTimer);
+        clearTimeout(connectTimer);
         if (closed) return;
         closed = true;
         handlers.onClose({ unauthorized: ev.code === WS_CLOSE_UNAUTHORIZED });
@@ -106,6 +116,7 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
         close() {
           closed = true;
           clearTimeout(idleTimer);
+          clearTimeout(connectTimer);
           ws.close();
         },
       };

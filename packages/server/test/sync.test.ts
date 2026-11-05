@@ -121,6 +121,24 @@ describe("offline outbox", () => {
   });
 });
 
+describe("WebSocket blocked or stalled", () => {
+  it("a device whose WebSocket never connects still syncs both ways over HTTP", async () => {
+    const phone = await device(h, "phone");
+    const laptop = await device(h, "laptop-behind-proxy", { blockWebSocket: true });
+    devices.push(phone, laptop);
+    expect(laptop.engine.getState().status).toBe("online"); // via HTTP polling, not stuck "connecting"
+
+    phone.engine.add("from phone");
+    await waitFor(() => !!find(laptop, "from phone"), 2000, "phone -> blocked laptop");
+    laptop.engine.add("from laptop");
+    await waitFor(() => !!find(phone, "from laptop"), 2000, "blocked laptop -> phone");
+    laptop.engine.setDone(find(laptop, "from phone")!.id, true);
+    await waitFor(() => find(phone, "from phone")?.done === true, 2000, "check");
+    await settled(laptop);
+    expect((await dbRows()).map((r) => r.text).sort()).toEqual(["from laptop", "from phone"]);
+  });
+});
+
 describe("conflict rules", () => {
   it("same item edited on both devices at the same moment: both end with the same text", async () => {
     const [a, b] = await two();
