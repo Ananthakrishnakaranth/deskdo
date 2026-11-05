@@ -48,3 +48,37 @@ jobs:
         with:
           name: DeskDo-Setup
           path: packages/desktop/release/DeskDo-Setup-*.exe
+
+  android-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.11.1" }
+      # A stable signing key (stored as repo secrets) lets each new APK install over the old one.
+      # Without the secrets the APK is signed with a throwaway debug key instead.
+      - name: Load signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 not set; APK will be debug-signed"
+          fi
+      - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: gradle --no-daemon assembleRelease
+      - run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/DeskDo.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeskDo-Android
+          path: packages/android/app/build/outputs/apk/release/DeskDo.apk

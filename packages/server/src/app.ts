@@ -95,6 +95,20 @@ export function createApp(cfg: Config, db: Db): App {
       case "POST /api/logout":
         res.setHeader("Set-Cookie", auth.clearCookie(isSecure(req)));
         return json(res, 200, { ok: true });
+      case "GET /api/handoff": {
+        // The Android app signs in once (bearer token in the Android Keystore), then opens the PWA in
+        // a WebView with this request carrying the token as a header. We turn it into the PWA's
+        // cookie session and redirect to the app. Bearer-only: a cookie or a cross-site link can't
+        // trigger it, because neither can attach an Authorization header.
+        const { token, via } = auth.tokenFrom(req);
+        if (via !== "bearer") throw new HttpError(401, "bearer token required");
+        const s = await auth.verify(token);
+        if (!s) throw new HttpError(401, "unauthorized");
+        const { token: cookieToken, expiresAt } = await auth.issue(s.deviceId);
+        res.setHeader("Set-Cookie", auth.sessionCookie(cookieToken, expiresAt, isSecure(req)));
+        res.writeHead(302, { Location: "/" }).end();
+        return;
+      }
       case "GET /api/session": {
         const s = await requireSession(req);
         return json(res, 200, { deviceId: s.deviceId });

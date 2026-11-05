@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeskDo</string>
+    <string name="widget_title">To-do</string>
+    <string name="widget_description">Your DeskDo list. Tap a task to check it off.</string>
+    <string name="refresh">Refresh</string>
+    <string name="add">Open DeskDo to add or edit</string>
+    <string name="empty_list">Nothing to do. Tap here or + to add a task.</string>
+    <string name="empty_signed_out">Tap here to sign in to DeskDo.</string>
+    <string name="status_syncing">Syncing…</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_signed_out">Signed out</string>
+    <string name="limit_reached">List is full: at most 8 open tasks.</string>
+    <string name="sign_in_title">Sign in to DeskDo</string>
+    <string name="sign_in_hint">Use the same account as your desktop widget.</string>
+    <string name="server_url">Server URL</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="sign_in">Sign in</string>
+    <string name="signing_in">Signing in… (a sleeping server can take up to a minute)</string>
+    <string name="error_https">The server URL must start with https://</string>
+    <string name="error_network">Couldn\'t reach the server. Check your connection and try again.</string>
+    <string name="error_generic">Sign-in failed.</string>
+</resources>

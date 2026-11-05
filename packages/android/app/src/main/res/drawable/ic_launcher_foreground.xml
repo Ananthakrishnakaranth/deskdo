@@ -1,0 +1,7 @@
+<!-- 108dp adaptive icon; the check mark stays inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FF7AA7FF" android:strokeWidth="8" android:fillColor="#00000000"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M37,56l12,12l23,-27" />
+</vector>

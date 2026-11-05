@@ -14,6 +14,15 @@ export async function boot(): Promise<AppContext> {
   const store = await IdbStore.open();
   const engine = new SyncEngine(store);
   await engine.init();
+  if (localStorage.getItem(SIGNED_IN_KEY) !== "1") {
+    // A session may exist without the hint, e.g. the Android app signed in on our behalf (handoff).
+    try {
+      const res = await fetch("/api/session", { cache: "no-store" });
+      if (res.ok) localStorage.setItem(SIGNED_IN_KEY, "1");
+    } catch {
+      /* offline: stay local until the user signs in */
+    }
+  }
   if (localStorage.getItem(SIGNED_IN_KEY) === "1") engine.setTransport(createHttpTransport({ baseUrl: "" }));
 
   // Mobile networks come and go: react to the OS's connectivity and foreground signals.

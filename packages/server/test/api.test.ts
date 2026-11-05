@@ -34,6 +34,18 @@ describe("auth", () => {
     expect((await fetch(`${h.baseUrl}/api/session`, { headers: { Cookie: session, Origin: "https://evil.example" } })).status).toBe(403);
   });
 
+  it("handoff turns a bearer token into a cookie session (Android app → in-app PWA)", async () => {
+    const token = await login(h.baseUrl, "android-1");
+    const res = await fetch(`${h.baseUrl}/api/handoff`, { headers: { Authorization: `Bearer ${token}` }, redirect: "manual" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+    const session = res.headers.get("set-cookie")!.split(";")[0]!;
+    expect((await fetch(`${h.baseUrl}/api/session`, { headers: { Cookie: session } })).status).toBe(200);
+    // Without a bearer header (e.g. a link from another site) it does nothing.
+    expect((await fetch(`${h.baseUrl}/api/handoff`, { redirect: "manual" })).status).toBe(401);
+    expect((await fetch(`${h.baseUrl}/api/handoff`, { headers: { Cookie: session }, redirect: "manual" })).status).toBe(401);
+  });
+
   it("WebSocket without auth is closed with 4401", async () => {
     const ws = new WebSocket(h.baseUrl.replace("http", "ws") + "/ws");
     const code = await new Promise<number>((r) => {
