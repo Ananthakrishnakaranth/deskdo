@@ -30,18 +30,23 @@ let tray: Tray | null = null;
 let db: LocalDb;
 let quitting = false;
 
+// Windows matches the Run-key entry by exe path *and* arguments, so the query must pass the same args
+// we registered with, or it always reports "off".
+const LOGIN_ARGS = ["--autostart"];
+const isOpenAtLogin = (): boolean => app.getLoginItemSettings({ args: LOGIN_ARGS }).openAtLogin;
+
 function settings(): DesktopSettings {
   return {
     serverUrl: db.getMeta("serverUrl") ?? "",
     email: db.getMeta("email") ?? "",
-    openAtLogin: app.getLoginItemSettings().openAtLogin,
+    openAtLogin: isOpenAtLogin(),
   };
 }
 
 function setOpenAtLogin(on: boolean): void {
   // Writes HKCU\Software\Microsoft\Windows\CurrentVersion\Run. "--autostart" lets us know we were
   // launched by Windows (so we never steal focus).
-  app.setLoginItemSettings({ openAtLogin: on, args: ["--autostart"] });
+  app.setLoginItemSettings({ openAtLogin: on, args: LOGIN_ARGS });
   db.setMeta("openAtLogin", on ? "1" : "0");
   refreshTrayMenu();
 }
@@ -162,7 +167,7 @@ function refreshTrayMenu(): void {
           win?.focus();
         },
       },
-      { label: "Start with Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (i) => setOpenAtLogin(i.checked) },
+      { label: "Start with Windows", type: "checkbox", checked: isOpenAtLogin(), click: (i) => setOpenAtLogin(i.checked) },
       { type: "separator" },
       { label: "Quit DeskDo", click: () => { quitting = true; app.quit(); } },
     ]),
