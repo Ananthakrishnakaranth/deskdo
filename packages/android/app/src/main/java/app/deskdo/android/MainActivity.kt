@@ -2,6 +2,10 @@ package app.deskdo.android
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -58,6 +62,35 @@ class MainActivity : Activity() {
             web.loadUrl("$server/api/handoff", mapOf("Authorization" to "Bearer $token"))
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (::web.isInitialized) offerWidget()
+    }
+
+    /**
+     * Some launchers (notably Xiaomi HyperOS) make widgets from apps installed outside the Play Store
+     * hard to find in their picker. Android can add the widget directly: offer that until a widget
+     * exists or the user says not to ask again.
+     */
+    private fun offerWidget() {
+        val mgr = AppWidgetManager.getInstance(this)
+        val provider = ComponentName(this, TodoWidgetProvider::class.java)
+        val prefs = getSharedPreferences("deskdo_settings", Context.MODE_PRIVATE)
+        if (mgr.getAppWidgetIds(provider).isNotEmpty()) return
+        if (prefs.getBoolean("widgetOfferDismissed", false) || offerShown) return
+        if (!mgr.isRequestPinAppWidgetSupported) return
+        offerShown = true
+        AlertDialog.Builder(this)
+            .setTitle(R.string.widget_offer_title)
+            .setMessage(R.string.widget_offer_message)
+            .setPositiveButton(R.string.widget_offer_add) { _, _ -> mgr.requestPinAppWidget(provider, null, null) }
+            .setNegativeButton(R.string.widget_offer_later, null)
+            .setNeutralButton(R.string.widget_offer_never) { _, _ -> prefs.edit().putBoolean("widgetOfferDismissed", true).apply() }
+            .show()
+    }
+
+    private var offerShown = false
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)

@@ -21,4 +21,9 @@
     <string name="error_https">The server URL must start with https://</string>
     <string name="error_network">Couldn\'t reach the server. Check your connection and try again.</string>
     <string name="error_generic">Sign-in failed.</string>
+    <string name="widget_offer_title">Add the DeskDo widget?</string>
+    <string name="widget_offer_message">Put your to-do list on the home screen. Tap a task on the widget to check it off.</string>
+    <string name="widget_offer_add">Add widget</string>
+    <string name="widget_offer_later">Not now</string>
+    <string name="widget_offer_never">Don\'t ask again</string>
 </resources>
