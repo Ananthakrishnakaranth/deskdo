@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import kotlin.concurrent.thread
 
 /**
  * The full app (add, edit, reorder, delete) is the same PWA the browser uses, hosted in a WebView,
@@ -59,7 +60,18 @@ class MainActivity : Activity() {
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState)
         } else {
-            web.loadUrl("$server/api/handoff", mapOf("Authorization" to "Bearer $token"))
+            // Turn the native sign-in into the web app's cookie session, then open the app. If we're
+            // offline, just open it: the cached app and any existing session still work.
+            thread {
+                try {
+                    val cookies = CookieManager.getInstance()
+                    Api.handoffCookies(server, token).forEach { cookies.setCookie(server, it) }
+                    cookies.flush()
+                } catch (e: Exception) {
+                    // offline or server asleep: fall through and load the cached app
+                }
+                runOnUiThread { if (!isFinishing) web.loadUrl("$server/") }
+            }
         }
     }
 

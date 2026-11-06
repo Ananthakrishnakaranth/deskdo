@@ -57,6 +57,28 @@ object Api {
         return JSONObject(request("POST", "$server/api/ops", token, body.toString()))
     }
 
+    /**
+     * Exchange the bearer token for the web app's session cookie(s). Done natively because Android
+     * WebView can drop extra request headers once the web app's service worker controls the page.
+     * Returns the raw Set-Cookie values (empty if the token was not accepted).
+     */
+    fun handoffCookies(server: String, token: String): List<String> {
+        val conn = URL("$server/api/handoff").openConnection() as HttpURLConnection
+        try {
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = TIMEOUT_MS
+            conn.readTimeout = TIMEOUT_MS
+            conn.useCaches = false
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.responseCode // perform the request
+            return conn.headerFields.entries
+                .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
+                .flatMap { it.value }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun request(method: String, url: String, token: String?, body: String?): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {

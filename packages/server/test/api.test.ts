@@ -41,9 +41,14 @@ describe("auth", () => {
     expect(res.headers.get("location")).toBe("/");
     const session = res.headers.get("set-cookie")!.split(";")[0]!;
     expect((await fetch(`${h.baseUrl}/api/session`, { headers: { Cookie: session } })).status).toBe(200);
-    // Without a bearer header (e.g. a link from another site) it does nothing.
-    expect((await fetch(`${h.baseUrl}/api/handoff`, { redirect: "manual" })).status).toBe(401);
-    expect((await fetch(`${h.baseUrl}/api/handoff`, { headers: { Cookie: session }, redirect: "manual" })).status).toBe(401);
+    // Without a valid bearer header (a link from another site, or a WebView that dropped the header)
+    // it just redirects to the app and mints nothing.
+    for (const headers of [{}, { Cookie: session }, { Authorization: "Bearer nope" }] as Record<string, string>[]) {
+      const r = await fetch(`${h.baseUrl}/api/handoff`, { headers, redirect: "manual" });
+      expect(r.status).toBe(302);
+      expect(r.headers.get("location")).toBe("/");
+      expect(r.headers.get("set-cookie")).toBeNull();
+    }
   });
 
   it("WebSocket without auth is closed with 4401", async () => {
