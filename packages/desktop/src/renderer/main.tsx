@@ -18,7 +18,9 @@ const store: LocalStore = {
 export async function connect(engine: SyncEngine): Promise<void> {
   const [s, token] = await Promise.all([bridge.settings.get(), bridge.auth.getToken()]);
   if (s.serverUrl && token) {
-    engine.setTransport(createHttpTransport({ baseUrl: s.serverUrl, getToken: () => bridge.auth.getToken() }));
+    // The token only changes when you sign in again, which calls connect() again, so keep it here
+    // instead of asking the main process over IPC for every request and every reconnect.
+    engine.setTransport(createHttpTransport({ baseUrl: s.serverUrl, getToken: async () => token }));
   } else {
     engine.setTransport(null);
   }

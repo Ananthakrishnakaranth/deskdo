@@ -1,12 +1,15 @@
-import { createHttpTransport, type LoginResponse } from "@deskdo/shared";
+import type { LoginResponse } from "@deskdo/shared";
 import { TodoCard, useEngineState } from "@deskdo/shared/ui";
-import { useState, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { SIGNED_IN_KEY, type AppContext } from "./boot";
 
-export function App({ engine, store }: AppContext) {
+export function App({ engine, store, session }: AppContext) {
   const state = useEngineState(engine);
+  const sessionState = useSyncExternalStore((cb) => session.subscribe(cb), () => session.get());
   const [showAccount, setShowAccount] = useState(false);
-  const needsLogin = state.status === "local" || state.status === "unauthorized";
+  // Only ask for a password when the server has actually said there's no session. While it's still
+  // waking up, show the saved list instead of a sign-in form.
+  const needsLogin = state.status === "unauthorized" || (state.status === "local" && sessionState === "signed-out");
 
   return (
     <main className="app">
@@ -25,13 +28,12 @@ export function App({ engine, store }: AppContext) {
       />
       {(needsLogin || showAccount) && (
         <div className="sheet">
-          {needsLogin ? (
+          {needsLogin || state.status === "local" ? (
             <LoginForm
               expired={state.status === "unauthorized"}
               deviceId={engine.getDeviceId()}
               onSignedIn={() => {
-                localStorage.setItem(SIGNED_IN_KEY, "1");
-                engine.setTransport(createHttpTransport({ baseUrl: "" }));
+                session.markSignedIn();
                 setShowAccount(false);
               }}
             />

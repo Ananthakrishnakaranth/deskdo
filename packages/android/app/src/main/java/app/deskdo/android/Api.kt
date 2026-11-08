@@ -62,12 +62,12 @@ object Api {
      * WebView can drop extra request headers once the web app's service worker controls the page.
      * Returns the raw Set-Cookie values (empty if the token was not accepted).
      */
-    fun handoffCookies(server: String, token: String): List<String> {
+    fun handoffCookies(server: String, token: String, timeoutMs: Int = TIMEOUT_MS): List<String> {
         val conn = URL("$server/api/handoff").openConnection() as HttpURLConnection
         try {
             conn.instanceFollowRedirects = false
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
             conn.useCaches = false
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.responseCode // perform the request

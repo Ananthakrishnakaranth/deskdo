@@ -60,17 +60,23 @@ class MainActivity : Activity() {
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState)
         } else {
-            // Turn the native sign-in into the web app's cookie session, then open the app. If we're
-            // offline, just open it: the cached app and any existing session still work.
+            // Show the app right away (it renders from the phone's own storage), and hand the native
+            // sign-in over to the page in the background. Never make the screen wait for the network:
+            // the free server can take a minute to wake up.
+            web.loadUrl("$server/")
             thread {
-                try {
+                val ok = try {
                     val cookies = CookieManager.getInstance()
-                    Api.handoffCookies(server, token).forEach { cookies.setCookie(server, it) }
+                    val set = Api.handoffCookies(server, token, timeoutMs = 20_000)
+                    set.forEach { cookies.setCookie(server, it) }
                     cookies.flush()
+                    set.isNotEmpty()
                 } catch (e: Exception) {
-                    // offline or server asleep: fall through and load the cached app
+                    false // offline or server asleep: the page keeps retrying on its own
                 }
-                runOnUiThread { if (!isFinishing) web.loadUrl("$server/") }
+                if (ok) runOnUiThread {
+                    if (!isFinishing) web.evaluateJavascript("window.dispatchEvent(new Event('deskdo-session'))", null)
+                }
             }
         }
     }

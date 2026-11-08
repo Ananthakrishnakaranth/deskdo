@@ -188,6 +188,48 @@ try {
     .then(() => record("clear completed on phone syncs to laptop", true))
     .catch(() => record("clear completed on phone syncs to laptop", false));
 
+  // --- Slow / sleeping server: the app must render its saved list at once, never a blank page ----
+  // Reload the phone with every /api/session call delayed 25 s (like a free server waking up).
+  const phoneTexts = await texts(phone);
+  await phone.evaluate(() => localStorage.removeItem("deskdo.signedIn")); // force the session check
+  await phone.route("**/api/session", async (route) => {
+    await new Promise((r) => setTimeout(r, 25_000));
+    await route.continue().catch(() => {});
+  });
+  const t0 = Date.now();
+  await phone.reload({ waitUntil: "domcontentloaded" });
+  await phone.locator(".dd-card").waitFor({ timeout: 5000 });
+  const renderMs = Date.now() - t0;
+  const shown = await texts(phone);
+  const loginShown = await phone.getByRole("button", { name: "Sign in" }).isVisible().catch(() => false);
+  record("server slow to answer: app shows the saved list immediately, no sign-in prompt",
+    renderMs < 5000 && JSON.stringify(shown) === JSON.stringify(phoneTexts) && !loginShown,
+    `rendered in ${renderMs} ms, ${shown.length} tasks, sign-in form ${loginShown ? "shown" : "not shown"}`);
+  await phone.unroute("**/api/session");
+
+  // --- Android app hand-off: a fresh page with no session gets signed in from outside ------------
+  const appCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const app = await appCtx.newPage();
+  await app.goto(BASE);
+  await app.getByRole("button", { name: "Sign in" }).waitFor({ timeout: 5000 }); // no session yet
+  // What MainActivity does: obtain the session cookie natively, then dispatch "deskdo-session".
+  const login = await appCtx.request.post(`${BASE}/api/login`, { data: { email: EMAIL, password: PASSWORD, deviceId: "android-e2e", mode: "bearer" } });
+  const { token } = await login.json();
+  const handoff = await appCtx.request.get(`${BASE}/api/handoff`, { headers: { Authorization: `Bearer ${token}` }, maxRedirects: 0 });
+  const cookie = handoff.headers()["set-cookie"].split(";")[0];
+  const [name, value] = cookie.split("=");
+  await appCtx.addCookies([{ name, value, url: BASE, httpOnly: true, sameSite: "Strict" }]);
+  await app.evaluate(() => window.dispatchEvent(new Event("deskdo-session")));
+  await app.locator(".dd-status-online").waitFor({ timeout: 5000 });
+  await waitFor(async () => JSON.stringify(await texts(app)) === JSON.stringify(await texts(laptop)), 3000)
+    .then(() => record("Android hand-off: page signs in by itself and shows the same tasks", true))
+    .catch(async () => record("Android hand-off: page signs in by itself and shows the same tasks", false, (await texts(app)).join("|")));
+  await add(app, "added in android app");
+  await waitFor(async () => (await texts(laptop)).includes("added in android app"), 2000)
+    .then((ms) => record("Android app -> laptop within 2 s after hand-off", true, `${ms} ms`))
+    .catch(() => record("Android app -> laptop within 2 s after hand-off", false));
+  await appCtx.close();
+
   await laptop.screenshot({ path: join(root, "e2e/laptop.png") });
   await phone.screenshot({ path: join(root, "e2e/phone.png") });
 } catch (e) {
