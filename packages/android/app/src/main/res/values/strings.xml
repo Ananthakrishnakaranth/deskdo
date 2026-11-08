@@ -26,4 +26,5 @@
     <string name="widget_offer_add">Add widget</string>
     <string name="widget_offer_later">Not now</string>
     <string name="widget_offer_never">Don\'t ask again</string>
+    <string name="deleted_task">Deleted “%1$s”</string>
 </resources>

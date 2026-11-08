@@ -49,6 +49,10 @@ object WidgetStore {
         for (i in 0 until ops.length()) {
             val op = ops.getJSONObject(i)
             val item = byId[op.getString("itemId")] ?: continue
+            if (op.optString("type") == "delete") {
+                byId[item.id] = item.copy(deleted = true)
+                continue
+            }
             val patch = op.optJSONObject("patch") ?: continue
             if (patch.has("done")) byId[item.id] = item.copy(done = patch.getBoolean("done"))
         }
@@ -70,6 +74,22 @@ object WidgetStore {
         val ops = outbox(ctx).put(op)
         p(ctx).edit().putString("outbox", ops.toString()).apply()
         true
+    }
+
+    /**
+     * Queue a delete from the widget. The server keeps a tombstone, so the task disappears on every
+     * device and a late edit from another device can't bring it back. Returns the task's text, or
+     * null if it was already gone.
+     */
+    fun remove(ctx: Context, itemId: String): String? = synchronized(lock) {
+        val item = visibleItems(ctx).firstOrNull { it.id == itemId } ?: return null
+        val op = JSONObject()
+            .put("type", "delete")
+            .put("opId", UUID.randomUUID().toString())
+            .put("itemId", itemId)
+            .put("clientTime", System.currentTimeMillis())
+        p(ctx).edit().putString("outbox", outbox(ctx).put(op).toString()).apply()
+        item.text
     }
 
     fun status(ctx: Context): SyncStatus =

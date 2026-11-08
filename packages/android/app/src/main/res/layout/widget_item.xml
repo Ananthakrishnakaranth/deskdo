@@ -27,4 +27,13 @@
         android:maxLines="2"
         android:textColor="@color/text"
         android:textSize="15sp" />
+
+    <!-- Delete: a 40dp target at the far right, well away from the checkbox. -->
+    <ImageView
+        android:id="@+id/delete"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="11dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_delete" />
 </LinearLayout>

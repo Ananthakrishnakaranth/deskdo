@@ -26,13 +26,19 @@ class TodoWidgetProvider : AppWidgetProvider() {
     override fun onReceive(ctx: Context, intent: Intent) {
         super.onReceive(ctx, intent)
         when (intent.action) {
-            ACTION_TOGGLE -> {
+            ACTION_ROW -> {
                 val id = intent.getStringExtra(EXTRA_ITEM_ID) ?: return
-                if (!WidgetStore.toggle(ctx, id)) {
-                    Toast.makeText(ctx, R.string.limit_reached, Toast.LENGTH_SHORT).show()
-                    return
+                when (intent.getStringExtra(EXTRA_OP)) {
+                    OP_DELETE -> {
+                        val text = WidgetStore.remove(ctx, id) ?: return
+                        Toast.makeText(ctx, ctx.getString(R.string.deleted_task, text), Toast.LENGTH_SHORT).show()
+                    }
+                    else -> if (!WidgetStore.toggle(ctx, id)) {
+                        Toast.makeText(ctx, R.string.limit_reached, Toast.LENGTH_SHORT).show()
+                        return
+                    }
                 }
-                refreshAll(ctx) // show the tick immediately, then sync in the background
+                refreshAll(ctx) // show the change immediately, then sync in the background
                 Sync.enqueueNow(ctx)
             }
             ACTION_REFRESH -> {
@@ -44,7 +50,11 @@ class TodoWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val ACTION_TOGGLE = "app.deskdo.android.TOGGLE"
+        /** Any tap on a list row; EXTRA_OP says whether it was the row (tick) or its × (delete). */
+        const val ACTION_ROW = "app.deskdo.android.ROW"
+        const val EXTRA_OP = "op"
+        const val OP_TOGGLE = "toggle"
+        const val OP_DELETE = "delete"
         const val ACTION_REFRESH = "app.deskdo.android.REFRESH"
         const val EXTRA_ITEM_ID = "itemId"
 
@@ -87,11 +97,12 @@ class TodoWidgetProvider : AppWidgetProvider() {
             views.setRemoteAdapter(R.id.list, svc)
             views.setEmptyView(R.id.list, R.id.empty)
 
-            // Row taps: one template (must be MUTABLE so each row can fill in its item id).
-            val toggle = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_TOGGLE)
+            // Row taps: one template for the whole list (must be MUTABLE so each row and each × can
+            // fill in its item id and which action it is).
+            val rowTap = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_ROW)
             views.setPendingIntentTemplate(
                 R.id.list,
-                PendingIntent.getBroadcast(ctx, 1, toggle, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE),
+                PendingIntent.getBroadcast(ctx, 1, rowTap, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE),
             )
 
             val refresh = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_REFRESH)

@@ -11,6 +11,10 @@ class TodoWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = Factory(applicationContext)
 
     private class Factory(private val ctx: Context) : RemoteViewsFactory {
+        private fun fillIn(itemId: String, op: String) = Intent()
+            .putExtra(TodoWidgetProvider.EXTRA_ITEM_ID, itemId)
+            .putExtra(TodoWidgetProvider.EXTRA_OP, op)
+
         private var items: List<Item> = emptyList()
 
         override fun onCreate() {}
@@ -33,8 +37,11 @@ class TodoWidgetService : RemoteViewsService() {
                 val flags = Paint.ANTI_ALIAS_FLAG or if (item.done) Paint.STRIKE_THRU_TEXT_FLAG else 0
                 setInt(R.id.text, "setPaintFlags", flags)
                 setTextColor(R.id.text, ctx.getColor(if (item.done) R.color.text_done else R.color.text))
-                setOnClickFillInIntent(R.id.row, Intent().putExtra(TodoWidgetProvider.EXTRA_ITEM_ID, item.id))
+                // Tapping the row ticks it; tapping × deletes it (the inner view's own click wins).
+                setOnClickFillInIntent(R.id.row, fillIn(item.id, TodoWidgetProvider.OP_TOGGLE))
+                setOnClickFillInIntent(R.id.delete, fillIn(item.id, TodoWidgetProvider.OP_DELETE))
                 setContentDescription(R.id.row, (if (item.done) "Done: " else "To do: ") + item.text)
+                setContentDescription(R.id.delete, "Delete " + item.text)
             }
         }
     }
