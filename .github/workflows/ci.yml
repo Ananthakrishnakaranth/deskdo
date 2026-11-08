@@ -43,7 +43,10 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @deskdo/desktop test
-      - run: pnpm dist:win
+      # electron-builder downloads Electron/NSIS from GitHub, which occasionally answers 504: retry.
+      - name: Build installer
+        shell: bash
+        run: pnpm dist:win || { echo "retrying after transient failure"; sleep 30; pnpm dist:win; } || { sleep 60; pnpm dist:win; }
       - uses: actions/upload-artifact@v4
         with:
           name: DeskDo-Setup
