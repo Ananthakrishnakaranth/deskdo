@@ -10,7 +10,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import androidx.work.Data
 import java.io.IOException
+import java.util.Calendar
 import kotlin.concurrent.thread
 import java.util.concurrent.TimeUnit
 
@@ -73,10 +75,17 @@ object Sync {
         WorkManager.getInstance(ctx).enqueueUniqueWork("deskdo-sync-now", ExistingWorkPolicy.REPLACE, req)
     }
 
-    /** Background refresh about every 15 minutes (Android's minimum for periodic work). */
+    /**
+     * Background refresh about every 15 minutes (Android's minimum for periodic work). Skipped
+     * between 01:00 and 06:00 phone time (see SyncWorker) so the free server can sleep at night.
+     */
     fun schedulePeriodic(ctx: Context) {
-        val req = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).setConstraints(online).build()
-        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("deskdo-sync-periodic", ExistingPeriodicWorkPolicy.KEEP, req)
+        val req = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(online)
+            .setInputData(Data.Builder().putBoolean(SyncWorker.KEY_PERIODIC, true).build())
+            .build()
+        // UPDATE (not KEEP) so phones upgrading from an older version pick up the new input data.
+        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("deskdo-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE, req)
     }
 
     fun cancelPeriodic(ctx: Context) {
@@ -86,7 +95,15 @@ object Sync {
 
 class SyncWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
     override fun doWork(): Result {
+        val periodic = inputData.getBoolean(KEY_PERIODIC, false)
+        // Automatic refreshes pause at night; your own taps (refresh, tick, delete) always sync.
+        if (periodic && Calendar.getInstance().get(Calendar.HOUR_OF_DAY) in QUIET_HOURS) return Result.success()
         Sync.run(applicationContext)
         return Result.success()
+    }
+
+    companion object {
+        const val KEY_PERIODIC = "periodic"
+        private val QUIET_HOURS = 1 until 6
     }
 }

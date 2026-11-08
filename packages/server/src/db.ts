@@ -7,12 +7,18 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (v) => Number(v));
 export type Db = pg.Pool;
 
 export function createPool(url: string, ssl: boolean): Db {
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString: url,
     ssl: ssl ? { rejectUnauthorized: true } : undefined,
     max: 5,
     idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 20_000, // Neon can take a moment to resume a suspended database
   });
+  // Neon closes idle connections when it suspends the database. pg reports that as an 'error'
+  // event on the pool; without a listener Node would crash the whole server. The pool replaces the
+  // connection on next use, so logging is all that's needed.
+  pool.on("error", (e) => console.error("database connection dropped (will reconnect):", e.message));
+  return pool;
 }
 
 const MIGRATIONS: string[] = [

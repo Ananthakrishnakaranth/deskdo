@@ -1,18 +1,40 @@
 name: Keep server awake
 
-# Render's free web services sleep after 15 minutes without traffic and then take up to a minute to
-# wake, which shows up as a blank or "connecting" app. Pinging the health endpoint regularly keeps
-# the one service awake (it fits in the free tier's 750 instance-hours a month). GitHub may run
-# scheduled jobs a few minutes late, hence every 5 minutes.
+# Render's free web services sleep after 15 minutes without traffic, take up to a minute to wake,
+# and occasionally don't wake at all (seen on 2026-11-08). This job, every 10 minutes from about
+# 05:30 to 01:30 India time:
+#   1. pings /healthz, which wakes the server if it's asleep;
+#   2. if three pings in a row get no answer, asks Render for a fresh start through the service's
+#      deploy hook (repository secret RENDER_DEPLOY_HOOK: Render dashboard -> deskdo -> Settings ->
+#      Deploy Hook). The run then fails, so GitHub emails you that it happened.
+# The server also pings itself while awake (packages/server/src/keepalive.ts); at night everything
+# is allowed to sleep, to stay inside the free tier's 750 hours a month shared by all free services.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/10 0-19 * * *" # UTC; India is UTC+5:30
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
       - name: Ping /healthz
-        run: curl -fsS --max-time 100 --retry 2 --retry-delay 5 https://deskdo.onrender.com/healthz
+        run: |
+          for attempt in 1 2 3; do
+            curl -fsS --max-time 100 https://deskdo.onrender.com/healthz && exit 0
+            echo "no answer (attempt $attempt)"; sleep 10
+          done
+          exit 1
+      - name: Server didn't wake up; restart it via Render deploy hook
+        if: failure()
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Server isn't answering and RENDER_DEPLOY_HOOK isn't set, so it can't be restarted automatically."
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "::warning::Server wasn't answering; asked Render to restart it."
+          exit 1
