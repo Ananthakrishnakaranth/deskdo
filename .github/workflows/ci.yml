@@ -43,14 +43,32 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @deskdo/desktop test
-      # electron-builder downloads Electron/NSIS from GitHub, which occasionally answers 504: retry.
-      - name: Build installer
+      # electron-builder downloads its NSIS/winCodeSign helpers from GitHub releases; keep them cached
+      # so a GitHub download outage doesn't block every build.
+      - uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron-builder/Cache
+          key: electron-builder-cache-${{ runner.os }}-26.18.0
+      # Retry the installer a few times; if GitHub still won't serve the NSIS helper files (it answered
+      # 504 for one of them for hours), ship a portable zip instead, which doesn't need NSIS.
+      - name: Build installer (or portable zip)
         shell: bash
-        run: pnpm dist:win || { echo "retrying after transient failure"; sleep 30; pnpm dist:win; } || { sleep 60; pnpm dist:win; }
+        working-directory: packages/desktop
+        run: |
+          for wait in 0 30 90; do
+            sleep "$wait"
+            pnpm dist:win && exit 0
+          done
+          echo "::warning::NSIS helpers unavailable from GitHub; building a portable zip instead"
+          # Skip the exe-resource edit too (it needs the winCodeSign download); the app is unchanged.
+          npx electron-builder --win zip --x64 --publish never -c.win.signAndEditExecutable=false
       - uses: actions/upload-artifact@v4
         with:
           name: DeskDo-Setup
-          path: packages/desktop/release/DeskDo-Setup-*.exe
+          if-no-files-found: error
+          path: |
+            packages/desktop/release/DeskDo-Setup-*.exe
+            packages/desktop/release/*.zip
 
   android-apk:
     runs-on: ubuntu-latest
@@ -103,8 +121,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          mv dist/DeskDo-Setup/DeskDo-Setup-*.exe dist/DeskDo-Setup.exe
+          files=(dist/DeskDo-Android/DeskDo.apk)
+          notes="Built from ${GITHUB_SHA::7}. Android: install DeskDo.apk."
+          if ls dist/DeskDo-Setup/DeskDo-Setup-*.exe >/dev/null 2>&1; then
+            mv dist/DeskDo-Setup/DeskDo-Setup-*.exe dist/DeskDo-Setup.exe
+            files+=(dist/DeskDo-Setup.exe)
+            notes="$notes Windows: run DeskDo-Setup.exe."
+          fi
+          if ls dist/DeskDo-Setup/*.zip >/dev/null 2>&1; then
+            mv dist/DeskDo-Setup/*.zip dist/DeskDo-Windows.zip
+            files+=(dist/DeskDo-Windows.zip)
+            notes="$notes Windows (portable): unzip DeskDo-Windows.zip and run DeskDo.exe."
+          fi
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest dist/DeskDo-Android/DeskDo.apk dist/DeskDo-Setup.exe \
-            --target "$GITHUB_SHA" --title "Latest build" \
-            --notes "Built from ${GITHUB_SHA::7}. Android: install DeskDo.apk. Windows: run DeskDo-Setup.exe."
+          gh release create latest "${files[@]}" --target "$GITHUB_SHA" --title "Latest build" --notes "$notes"
