@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.RemoteViews
 import android.widget.Toast
 
@@ -95,12 +96,24 @@ class TodoWidgetProvider : AppWidgetProvider() {
                 ctx.getString(if (status == SyncStatus.SIGNED_OUT) R.string.empty_signed_out else R.string.empty_list),
             )
 
-            // List rows come from TodoWidgetService. The unique data URI keeps one adapter per widget.
-            val svc = Intent(ctx, TodoWidgetService::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12+: send the rows inside this same update. The header count and the list
+                // then always come from the same data; with the older service-based adapter some
+                // launchers (Xiaomi HyperOS) kept showing a stale, empty list under a correct count.
+                val rows = RemoteViews.RemoteCollectionItems.Builder()
+                    .setHasStableIds(true)
+                    .setViewTypeCount(1)
+                items.forEach { rows.addItem(widgetRowId(it), widgetRow(ctx, it)) }
+                views.setRemoteAdapter(R.id.list, rows.build())
+            } else {
+                // Android 8–11: rows come from TodoWidgetService. A new data URI on every update makes
+                // the launcher re-bind and re-fetch instead of reusing a cached (possibly stale) list.
+                val svc = Intent(ctx, TodoWidgetService::class.java).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                    data = Uri.parse("deskdo-widget://$widgetId/${System.nanoTime()}")
+                }
+                views.setRemoteAdapter(R.id.list, svc)
             }
-            views.setRemoteAdapter(R.id.list, svc)
             views.setEmptyView(R.id.list, R.id.empty)
 
             // Row taps: one template for the whole list (must be MUTABLE so each row and each × can
