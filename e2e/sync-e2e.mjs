@@ -228,6 +228,17 @@ try {
   await waitFor(async () => (await texts(laptop)).includes("added in android app"), 2000)
     .then((ms) => record("Android app -> laptop within 2 s after hand-off", true, `${ms} ms`))
     .catch(() => record("Android app -> laptop within 2 s after hand-off", false));
+  // The Android widget bridge: the page reports its list to window.DeskDoAndroid when it changes.
+  await app.addInitScript(() => {
+    window.__widgetReports = [];
+    window.DeskDoAndroid = { onItemsChanged: (json) => window.__widgetReports.push(JSON.parse(json)) };
+  });
+  await app.reload();
+  await app.locator(".dd-status-online").waitFor({ timeout: 5000 });
+  await add(laptop, "laptop -> android widget");
+  await waitFor(async () => (await app.evaluate(() => window.__widgetReports.at(-1)?.map((i) => i.text) ?? [])).includes("laptop -> android widget"), 2000)
+    .then((ms) => record("change on laptop reaches the Android widget via the app within 2 s", true, `${ms} ms`))
+    .catch(async () => record("change on laptop reaches the Android widget via the app within 2 s", false, JSON.stringify(await app.evaluate(() => window.__widgetReports.length))));
   await appCtx.close();
 
   await laptop.screenshot({ path: join(root, "e2e/laptop.png") });

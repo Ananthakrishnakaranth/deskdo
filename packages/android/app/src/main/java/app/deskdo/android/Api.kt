@@ -46,15 +46,15 @@ object Api {
     }
 
     /** Full current state (since=0), including tombstones. The list is tiny (≤ a few dozen rows). */
-    fun allItems(server: String, token: String): List<Item> {
-        val res = JSONObject(request("GET", "$server/api/changes?since=0", token, null))
+    fun allItems(server: String, token: String, timeoutMs: Int = TIMEOUT_MS): List<Item> {
+        val res = JSONObject(request("GET", "$server/api/changes?since=0", token, null, timeoutMs))
         val arr = res.getJSONArray("items")
         return (0 until arr.length()).map { Item.fromJson(arr.getJSONObject(it)) }
     }
 
-    fun push(server: String, token: String, deviceId: String, ops: JSONArray): JSONObject {
+    fun push(server: String, token: String, deviceId: String, ops: JSONArray, timeoutMs: Int = TIMEOUT_MS): JSONObject {
         val body = JSONObject().put("deviceId", deviceId).put("ops", ops)
-        return JSONObject(request("POST", "$server/api/ops", token, body.toString()))
+        return JSONObject(request("POST", "$server/api/ops", token, body.toString(), timeoutMs))
     }
 
     /**
@@ -79,12 +79,12 @@ object Api {
         }
     }
 
-    private fun request(method: String, url: String, token: String?, body: String?): String {
+    private fun request(method: String, url: String, token: String?, body: String?, timeoutMs: Int = TIMEOUT_MS): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
             conn.useCaches = false
             conn.setRequestProperty("Accept", "application/json")
             if (token != null) conn.setRequestProperty("Authorization", "Bearer $token")

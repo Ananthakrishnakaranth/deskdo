@@ -29,6 +29,33 @@ object WidgetStore {
         p(ctx).edit().putString("items", arr.toString()).putLong("syncedAt", System.currentTimeMillis()).apply()
     }
 
+    /**
+     * The in-app web page's current list (JSON array of {id, text, done, position}). Shown by the
+     * widget straight away; the next widget sync replaces it with the server's copy. Returns false
+     * for anything that doesn't parse.
+     */
+    fun saveFromApp(ctx: Context, json: String): Boolean = synchronized(lock) {
+        val items = try {
+            val arr = JSONArray(json)
+            (0 until minOf(arr.length(), 200)).map {
+                val o = arr.getJSONObject(it)
+                Item(
+                    id = o.getString("id"),
+                    text = o.getString("text").take(500),
+                    done = o.getBoolean("done"),
+                    position = o.getDouble("position"),
+                    deleted = false,
+                    seq = 0,
+                )
+            }
+        } catch (e: Exception) {
+            return false
+        }
+        saveServerItems(ctx, items)
+        setStatus(ctx, SyncStatus.OK)
+        true
+    }
+
     fun outbox(ctx: Context): JSONArray = synchronized(lock) { JSONArray(p(ctx).getString("outbox", "[]")) }
 
     /** Remove ops the server has answered (any status: applied, duplicate, ignored or rejected). */

@@ -16,7 +16,7 @@ class TodoWidgetProvider : AppWidgetProvider() {
         ids.forEach { mgr.updateAppWidget(it, buildViews(ctx, it)) }
         mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
         Sync.schedulePeriodic(ctx)
-        Sync.enqueueNow(ctx)
+        Sync.runNow(ctx)
     }
 
     override fun onEnabled(ctx: Context) = Sync.schedulePeriodic(ctx)
@@ -38,15 +38,21 @@ class TodoWidgetProvider : AppWidgetProvider() {
                         return
                     }
                 }
-                refreshAll(ctx) // show the change immediately, then sync in the background
-                Sync.enqueueNow(ctx)
+                refreshAll(ctx) // show the change immediately, then sync right away
+                syncNow(ctx)
             }
             ACTION_REFRESH -> {
                 WidgetStore.setStatus(ctx, SyncStatus.SYNCING)
                 refreshAll(ctx)
-                Sync.enqueueNow(ctx)
+                syncNow(ctx)
             }
         }
+    }
+
+    /** Sync now, keeping this receiver alive until done (goAsync allows several seconds). */
+    private fun syncNow(ctx: Context) {
+        val pending = goAsync()
+        Sync.runNow(ctx, timeoutMs = 8_000) { pending.finish() }
     }
 
     companion object {

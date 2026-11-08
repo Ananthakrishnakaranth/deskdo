@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -49,6 +50,9 @@ class MainActivity : Activity() {
                 }
             }
         }
+        // The web app reports its list here whenever it changes (also when changes arrive live from
+        // the laptop), so the home-screen widget updates instantly instead of on its next sync.
+        web.addJavascriptInterface(WidgetBridge(applicationContext), "DeskDoAndroid")
         CookieManager.getInstance().setAcceptCookie(true)
         val root = FrameLayout(this).apply {
             setBackgroundColor(getColor(R.color.background))
@@ -119,13 +123,22 @@ class MainActivity : Activity() {
         super.onPause()
         if (::web.isInitialized) {
             CookieManager.getInstance().flush()
-            // You probably just changed the list: update the home-screen widget.
-            Sync.enqueueNow(this)
+            // You probably just changed the list: update the home-screen widget now.
+            Sync.runNow(this)
         }
     }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (::web.isInitialized && web.canGoBack()) web.goBack() else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+}
+
+/** Exposed to the page as window.DeskDoAndroid. Only our own pages load in this WebView. */
+class WidgetBridge(private val ctx: Context) {
+    @JavascriptInterface
+    fun onItemsChanged(json: String) {
+        if (json.length > 200_000) return
+        if (WidgetStore.saveFromApp(ctx, json)) TodoWidgetProvider.refreshAll(ctx)
     }
 }

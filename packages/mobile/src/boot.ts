@@ -96,6 +96,8 @@ export async function boot(): Promise<AppContext> {
   if (session.get() === "signed-in") engine.setTransport(createHttpTransport({ baseUrl: "" }));
   else session.check();
 
+  reportToAndroidWidget(engine);
+
   // Mobile networks come and go: react to the OS's connectivity and foreground signals.
   const wake = () => {
     engine.kick();
@@ -113,4 +115,31 @@ export async function boot(): Promise<AppContext> {
   // Sent by the Android app once it has handed its sign-in over to this page.
   addEventListener("deskdo-session", wake);
   return { engine, store, session };
+}
+
+/**
+ * Inside the Android app, the page can update the home-screen widget directly (the app exposes
+ * window.DeskDoAndroid). We send the list whenever it changes while connected, so the widget shows
+ * changes from this phone and live changes from the laptop at once. Not present in a browser.
+ */
+function reportToAndroidWidget(engine: SyncEngine): void {
+  const bridge = (globalThis as { DeskDoAndroid?: { onItemsChanged(json: string): void } }).DeskDoAndroid;
+  if (!bridge) return;
+  let lastItems: unknown = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  engine.subscribe((s) => {
+    // Only report data we got from the server in this session; a stale local copy must not
+    // overwrite what the widget fetched itself.
+    if (s.status !== "online" || s.items === lastItems) return;
+    lastItems = s.items;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const items = s.items.map((i) => ({ id: i.id, text: i.text, done: i.done, position: i.position }));
+      try {
+        bridge.onItemsChanged(JSON.stringify(items));
+      } catch {
+        /* older app version without the bridge method */
+      }
+    }, 200);
+  });
 }

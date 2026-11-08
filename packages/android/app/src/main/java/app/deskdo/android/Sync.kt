@@ -11,13 +11,33 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import java.io.IOException
+import kotlin.concurrent.thread
 import java.util.concurrent.TimeUnit
 
 object Sync {
     private val running = Any()
 
+    /**
+     * Sync right now on a background thread, without waiting for Android's job scheduler (which
+     * Xiaomi and other phones can delay for a long time). If it can't finish (offline, server
+     * waking up), the scheduled job is queued as a fallback. `done` runs when finished.
+     */
+    fun runNow(ctx: Context, timeoutMs: Int = 15_000, done: (() -> Unit)? = null) {
+        val app = ctx.applicationContext
+        thread(name = "deskdo-sync") {
+            try {
+                run(app, timeoutMs)
+                if (WidgetStore.status(app) != SyncStatus.OK) enqueueNow(app)
+            } catch (e: Exception) {
+                enqueueNow(app)
+            } finally {
+                done?.invoke()
+            }
+        }
+    }
+
     /** Push pending widget ops, then fetch the full list. Blocking: call from a worker thread. */
-    fun run(ctx: Context) = synchronized(running) {
+    fun run(ctx: Context, timeoutMs: Int = 70_000) = synchronized(running) {
         val token = TokenStore.load(ctx)
         if (token == null) {
             WidgetStore.setStatus(ctx, SyncStatus.SIGNED_OUT)
@@ -28,12 +48,12 @@ object Sync {
         try {
             val ops = WidgetStore.outbox(ctx)
             if (ops.length() > 0) {
-                val res = Api.push(server, token, Prefs.deviceId(ctx), ops)
+                val res = Api.push(server, token, Prefs.deviceId(ctx), ops, timeoutMs)
                 val results = res.getJSONArray("results")
                 val answered = (0 until results.length()).map { results.getJSONObject(it).getString("opId") }.toSet()
                 WidgetStore.removeOps(ctx, answered)
             }
-            WidgetStore.saveServerItems(ctx, Api.allItems(server, token))
+            WidgetStore.saveServerItems(ctx, Api.allItems(server, token, timeoutMs))
             WidgetStore.setStatus(ctx, SyncStatus.OK)
         } catch (e: ApiException) {
             WidgetStore.setStatus(ctx, if (e.status == 401) SyncStatus.SIGNED_OUT else SyncStatus.OFFLINE)
