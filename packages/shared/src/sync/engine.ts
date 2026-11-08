@@ -27,6 +27,8 @@ export interface EngineState {
   status: SyncStatus;
   /** Last user-facing problem (limit reached, rejected op, ...). Cleared by `dismissError()`. */
   error: string | null;
+  /** Why syncing isn't working right now (shown in status details); null while online. */
+  syncError: string | null;
 }
 
 export type CommandResult = { ok: true } | { ok: false; error: string };
@@ -40,6 +42,9 @@ export interface EngineOptions {
   pushBatchSize?: number;
   /** HTTP polling interval used while the WebSocket is unavailable (ms). */
   pollIntervalMs?: number;
+  /** How often the watchdog checks, and how long "not online" lasts before it starts over (ms). */
+  watchdogIntervalMs?: number;
+  watchdogResetMs?: number;
 }
 
 export const LIMIT_MESSAGE = `List is full: at most ${MAX_ACTIVE_ITEMS} open tasks. Finish or delete one first.`;
@@ -77,6 +82,8 @@ export class SyncEngine {
   private readonly maxBackoff: number;
   private readonly batchSize: number;
   private readonly pollIntervalMs: number;
+  private readonly watchdogIntervalMs: number;
+  private readonly watchdogResetMs: number;
 
   constructor(private readonly store: LocalStore, opts: EngineOptions = {}) {
     this.newId = opts.newId ?? (() => crypto.randomUUID());
@@ -85,6 +92,8 @@ export class SyncEngine {
     this.maxBackoff = opts.maxBackoffMs ?? 30_000;
     this.batchSize = opts.pushBatchSize ?? 50;
     this.pollIntervalMs = opts.pollIntervalMs ?? 3_000;
+    this.watchdogIntervalMs = opts.watchdogIntervalMs ?? 10_000;
+    this.watchdogResetMs = opts.watchdogResetMs ?? 40_000;
     this.backoff = this.minBackoff;
     this.recompute();
   }
@@ -123,6 +132,12 @@ export class SyncEngine {
   private unauthorized = false;
   private pollTimer: ReturnType<typeof setInterval> | undefined;
   private polling = false;
+  private syncError: string | null = null;
+  // Watchdog: if we haven't been online for a while, start over from scratch. Covers anything that
+  // leaves the connection logic stuck (sleep/resume, network changes, lost events) without relying on
+  // the OS to tell us.
+  private watchdogTimer: ReturnType<typeof setInterval> | undefined;
+  private notOnlineSince = 0;
 
   /** Attach a transport (signed in) or detach it (`null`, signed out / local-only). */
   setTransport(t: SyncTransport | null): void {
@@ -133,17 +148,43 @@ export class SyncEngine {
     this.transport = t;
     this.backoff = this.minBackoff;
     this.wsReady = this.wsConnecting = this.httpReady = this.unauthorized = false;
+    this.syncError = null;
+    clearInterval(this.watchdogTimer);
+    this.watchdogTimer = undefined;
     if (!t) {
       this.updateStatus();
       return;
     }
+    this.notOnlineSince = 0;
+    this.watchdogTimer = setInterval(() => this.watchdog(), this.watchdogIntervalMs);
     this.connect();
   }
 
-  /** Reconnect now (e.g. browser `online` event, app returned to foreground, laptop woke up). */
-  kick(): void {
+  private watchdog(): void {
     if (!this.transport || this.unauthorized) return;
-    if (this.wsReady) {
+    if (this.status === "online") {
+      this.notOnlineSince = 0;
+      return;
+    }
+    const now = this.now();
+    if (!this.notOnlineSince) {
+      this.notOnlineSince = now;
+      return;
+    }
+    if (now - this.notOnlineSince >= this.watchdogResetMs) {
+      this.notOnlineSince = now;
+      this.kick();
+    }
+    this.startPolling(); // in case nothing restarted it
+  }
+
+  /**
+   * Sync now. With `force`, also replace the live connection even if it looks healthy: after sleep or
+   * a network change a socket can look open but be dead, and we'd only notice at the idle timeout.
+   */
+  kick(force = false): void {
+    if (!this.transport || this.unauthorized) return;
+    if (this.wsReady && !force) {
       void this.flush().then(() => this.pull());
       return;
     }
@@ -164,6 +205,7 @@ export class SyncEngine {
   }
 
   dispose(): void {
+    clearInterval(this.watchdogTimer);
     this.live?.close();
     this.live = null;
     clearTimeout(this.reconnectTimer);
@@ -196,11 +238,12 @@ export class SyncEngine {
         // Broadcasts may arrive before the catch-up pull completes, so they never move the cursor.
         if (msg.type === "changes") this.receive(msg.items, null);
       },
-      onClose: ({ unauthorized }) => {
+      onClose: ({ unauthorized, reason }) => {
         if (this.transport !== t || this.live !== conn) return;
         this.live = null;
         this.wsReady = this.wsConnecting = false;
         if (unauthorized) return this.setUnauthorized();
+        if (reason) this.syncError = reason;
         this.updateStatus();
         this.scheduleReconnect();
         this.startPolling();
@@ -243,7 +286,9 @@ export class SyncEngine {
     } catch (e) {
       if (e instanceof UnauthorizedError) return this.setUnauthorized();
       this.httpReady = false;
+      this.syncError = e instanceof Error ? e.message : String(e);
       this.updateStatus();
+      this.recompute();
     } finally {
       this.polling = false;
     }
@@ -290,6 +335,7 @@ export class SyncEngine {
           : this.wsConnecting
             ? "connecting"
             : "offline";
+    if (s === "online") this.syncError = null;
     if (this.status === s) return;
     this.status = s;
     this.recompute();
@@ -348,6 +394,7 @@ export class SyncEngine {
 
   private handleTransportError(e: unknown): void {
     if (e instanceof UnauthorizedError) return this.setUnauthorized();
+    this.syncError = e instanceof Error ? e.message : String(e);
     // Network failure: whichever channel we were relying on is down. Fall back to reconnect + poll.
     this.httpReady = false;
     if (this.wsReady) {
@@ -489,7 +536,13 @@ export class SyncEngine {
 
   private recompute(): void {
     this.view = deriveItems(this.confirmed, this.outbox, this.deviceId);
-    this.state = { items: this.view, pendingCount: this.outbox.length, status: this.status, error: this.error };
+    this.state = {
+      items: this.view,
+      pendingCount: this.outbox.length,
+      status: this.status,
+      error: this.error,
+      syncError: this.syncError,
+    };
     for (const l of this.listeners) l(this.state);
   }
 }

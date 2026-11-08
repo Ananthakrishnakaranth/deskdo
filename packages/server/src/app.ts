@@ -27,9 +27,9 @@ export interface App {
   close(): Promise<void>;
 }
 
-export function createApp(cfg: Config, db: Db): App {
+export function createApp(cfg: Config, db: Db, opts: { pingIntervalMs?: number } = {}): App {
   const auth = new Auth(cfg);
-  const hub = new Hub();
+  const hub = new Hub(opts.pingIntervalMs);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
 
   const isSecure = (req: IncomingMessage) =>

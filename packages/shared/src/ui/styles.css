@@ -35,6 +35,9 @@
 .dd-count { color: var(--dd-muted); font-size: 0.85em; font-variant-numeric: tabular-nums; }
 .dd-header-extra { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 .dd-status { width: 7px; height: 7px; border-radius: 50%; background: var(--dd-muted); flex: none; }
+/* Bigger invisible click target around the dot (click = reconnect now). */
+.dd-card .dd-status { position: relative; cursor: pointer; }
+.dd-card .dd-status::after { content: ""; position: absolute; inset: -9px; }
 .dd-status-online { background: #5fd38d; }
 .dd-status-offline, .dd-status-unauthorized { background: #f0b45a; }
 .dd-status-connecting { background: #8ab4ff; animation: dd-pulse 1.2s ease-in-out infinite; }

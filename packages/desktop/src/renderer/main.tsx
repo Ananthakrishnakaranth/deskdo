@@ -30,9 +30,17 @@ const engine = new SyncEngine(store);
 await engine.init();
 await connect(engine);
 
-addEventListener("online", () => engine.kick());
+addEventListener("online", () => engine.kick(true));
 addEventListener("offline", () => engine.markOffline());
-bridge.on.resume(() => engine.kick());
+bridge.on.resume(() => engine.kick(true)); // woke from sleep: the old socket is probably dead
+// Whenever you look at or click the widget and it isn't synced, try again right away.
+const kickIfNotOnline = () => {
+  if (engine.getState().status !== "online") engine.kick();
+};
+addEventListener("focus", kickIfNotOnline);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") kickIfNotOnline();
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -11,7 +11,8 @@ export interface LiveHandlers {
   /** Called once the socket is open *and* authenticated. */
   onOpen(): void;
   onMessage(msg: ServerMessage): void;
-  onClose(info: { unauthorized: boolean }): void;
+  /** `reason` is a short human-readable explanation, shown in the app's status details. */
+  onClose(info: { unauthorized: boolean; reason?: string }): void;
 }
 
 export interface SyncTransport {
@@ -29,6 +30,11 @@ export interface HttpTransportOptions {
   idleTimeoutMs?: number;
   /** Give up on a connection attempt that hasn't finished (handshake + auth) in this long. */
   connectTimeoutMs?: number;
+  /**
+   * Abort an HTTP request that hasn't answered in this long. Without it, one request that hangs
+   * (stale socket after Wi-Fi changes or sleep, a proxy, a server waking up) blocks syncing forever.
+   */
+  requestTimeoutMs?: number;
 }
 
 /** WebSocket close code the server uses for auth failures. */
@@ -36,23 +42,35 @@ export const WS_CLOSE_UNAUTHORIZED = 4401;
 
 export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
   const base = opts.baseUrl.replace(/\/+$/, "");
-  const idleTimeoutMs = opts.idleTimeoutMs ?? 60_000;
+  const idleTimeoutMs = opts.idleTimeoutMs ?? 45_000; // server pings every 25 s
   const connectTimeoutMs = opts.connectTimeoutMs ?? 15_000;
+  const requestTimeoutMs = opts.requestTimeoutMs ?? 25_000;
 
   async function request<T>(path: string, init: RequestInit): Promise<T> {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     const token = opts.getToken ? await opts.getToken() : null;
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(base + path, {
-      ...init,
-      headers,
-      // Same-origin cookie for the PWA; bearer-only (no ambient credentials) for the desktop app.
-      credentials: opts.getToken ? "omit" : "same-origin",
-      cache: "no-store",
-    });
-    if (res.status === 401) throw new UnauthorizedError();
-    if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`);
-    return (await res.json()) as T;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), requestTimeoutMs);
+    try {
+      const res = await fetch(base + path, {
+        ...init,
+        headers,
+        // Same-origin cookie for the PWA; bearer-only (no ambient credentials) for the desktop app.
+        credentials: opts.getToken ? "omit" : "same-origin",
+        cache: "no-store",
+        signal: ctl.signal,
+      });
+      if (res.status === 401) throw new UnauthorizedError();
+      if (!res.ok) throw new Error(`Server answered HTTP ${res.status}`);
+      return (await res.json()) as T;
+    } catch (e) {
+      if (ctl.signal.aborted) throw new Error(`No answer from the server in ${Math.round(requestTimeoutMs / 1000)} s`);
+      if (e instanceof UnauthorizedError || (e instanceof Error && e.message.startsWith("Server answered"))) throw e;
+      throw new Error(`Can't reach the server (${e instanceof Error ? e.message : String(e)})`);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function wsUrl(): string {
@@ -71,12 +89,12 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
       let idleTimer: ReturnType<typeof setTimeout> | undefined;
       let connectTimer: ReturnType<typeof setTimeout> | undefined;
 
-      const finish = (unauthorized: boolean) => {
+      const finish = (unauthorized: boolean, reason?: string) => {
         clearTimeout(idleTimer);
         clearTimeout(connectTimer);
         if (closed) return;
         closed = true;
-        handlers.onClose({ unauthorized });
+        handlers.onClose({ unauthorized, reason });
       };
 
       const resetIdle = () => {
@@ -97,7 +115,9 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
         // A stalled handshake (proxy, antivirus, captive portal) would otherwise sit in CONNECTING
         // for minutes without ever firing close.
         connectTimer = setTimeout(() => {
-          if (!opened) socket.close();
+          if (opened) return;
+          finish(false, `Live connection didn't open within ${Math.round(connectTimeoutMs / 1000)} s`);
+          socket.close();
         }, connectTimeoutMs);
         socket.onopen = () => {
           resetIdle();
@@ -118,12 +138,13 @@ export function createHttpTransport(opts: HttpTransportOptions): SyncTransport {
           }
           handlers.onMessage(msg);
         };
-        socket.onclose = (ev) => finish(ev.code === WS_CLOSE_UNAUTHORIZED);
+        socket.onclose = (ev) =>
+          finish(ev.code === WS_CLOSE_UNAUTHORIZED, opened ? `Live connection dropped (code ${ev.code})` : `Live connection failed (code ${ev.code})`);
         socket.onerror = () => {
           /* followed by onclose */
         };
       };
-      start().catch(() => finish(false));
+      start().catch((e: unknown) => finish(false, `Live connection failed (${e instanceof Error ? e.message : String(e)})`));
 
       return {
         close() {

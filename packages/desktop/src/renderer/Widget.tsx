@@ -1,9 +1,17 @@
-import type { SyncEngine } from "@deskdo/shared";
+import type { SyncEngine, SyncStatus } from "@deskdo/shared";
 import { TodoCard, useEngineState } from "@deskdo/shared/ui";
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import type { DesktopSettings } from "../ipc";
 
 const bridge = window.deskdo;
+
+const STATUS_TEXT: Record<SyncStatus, string> = {
+  online: "connected",
+  connecting: "connecting…",
+  offline: "can't reach the server, retrying",
+  unauthorized: "signed out",
+  local: "not signed in",
+};
 
 export function Widget({ engine, reconnect }: { engine: SyncEngine; reconnect: () => Promise<void> }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -94,6 +102,16 @@ function Settings({ engine, reconnect, onClose }: { engine: SyncEngine; reconnec
           <p>
             Syncing with <b>{s.serverUrl}</b> as {s.email}.
           </p>
+          <p className={state.status === "online" ? "ok" : "warn"}>
+            Status: {STATUS_TEXT[state.status]}
+            {state.pendingCount > 0 ? ` · ${state.pendingCount} change(s) waiting to sync` : ""}
+          </p>
+          {state.syncError && state.status !== "online" && <p className="hint">Last problem: {state.syncError}</p>}
+          {state.status !== "online" && (
+            <button type="button" className="btn" onClick={() => engine.kick(true)}>
+              Reconnect now
+            </button>
+          )}
           <button type="button" className="btn" onClick={signOut}>Sign out</button>
         </div>
       ) : (

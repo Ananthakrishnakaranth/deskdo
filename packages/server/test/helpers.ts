@@ -19,7 +19,7 @@ export interface Harness {
   stop(): Promise<void>;
 }
 
-export async function startServer(): Promise<Harness> {
+export async function startServer(opts: { pingIntervalMs?: number } = {}): Promise<Harness> {
   const cfg: Config = {
     databaseUrl: TEST_DB,
     databaseSsl: false,
@@ -34,7 +34,7 @@ export async function startServer(): Promise<Harness> {
   };
   const db = createPool(cfg.databaseUrl, false);
   await migrate(db);
-  const app = createApp(cfg, db);
+  const app = createApp(cfg, db, opts);
   await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", () => r()));
   const { port } = app.server.address() as AddressInfo;
   return {

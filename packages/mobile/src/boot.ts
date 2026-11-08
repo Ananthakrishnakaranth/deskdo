@@ -101,7 +101,10 @@ export async function boot(): Promise<AppContext> {
     engine.kick();
     session.check();
   };
-  addEventListener("online", wake);
+  addEventListener("online", () => {
+    engine.kick(true); // network changed: the old socket may be dead
+    session.check();
+  });
   addEventListener("offline", () => engine.markOffline());
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") wake();

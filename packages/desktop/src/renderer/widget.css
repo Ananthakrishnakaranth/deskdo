@@ -33,6 +33,7 @@ body { user-select: none; }
 .settings .toggle { flex-direction: row; align-items: center; gap: 8px; color: #eef0f4; }
 .settings .hint { color: rgba(238,240,244,0.5); font-size: 12px; }
 .settings .warn { color: #f0b45a; }
+.settings .ok { color: #5fd38d; }
 .btn { font: inherit; color: #eef0f4; background: rgba(255,255,255,0.1); border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; }
 .btn.primary { background: #7aa7ff; color: #0e1015; font-weight: 600; }
 .btn:disabled { opacity: 0.6; }

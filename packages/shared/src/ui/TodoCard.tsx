@@ -49,7 +49,7 @@ export function TodoCard({ engine, variant, title = "To-do", headerExtra, header
         <span className="dd-count" title="Open tasks">
           {active}/{MAX_ACTIVE_ITEMS}
         </span>
-        <StatusDot status={state.status} pending={state.pendingCount} />
+        <StatusDot status={state.status} pending={state.pendingCount} detail={state.syncError} onReconnect={() => engine.kick(true)} />
         <div className="dd-header-extra">{headerExtra}</div>
       </header>
 
@@ -228,7 +228,29 @@ const STATUS_LABEL: Record<SyncStatus, string> = {
   unauthorized: "Signed out: sign in again to sync",
 };
 
-function StatusDot({ status, pending }: { status: SyncStatus; pending: number }) {
-  const label = STATUS_LABEL[status] + (pending > 0 && status !== "online" ? ` (${pending} pending)` : "");
-  return <span className={`dd-status dd-status-${status}`} title={label} aria-label={label} role="status" />;
+function StatusDot({
+  status,
+  pending,
+  detail,
+  onReconnect,
+}: {
+  status: SyncStatus;
+  pending: number;
+  detail: string | null;
+  onReconnect: () => void;
+}) {
+  const label =
+    STATUS_LABEL[status] +
+    (pending > 0 && status !== "online" ? ` (${pending} pending)` : "") +
+    (detail && status !== "online" ? `. ${detail}` : "") +
+    (status === "connecting" || status === "offline" ? ". Click to reconnect now." : "");
+  return (
+    <button
+      type="button"
+      className={`dd-status dd-status-${status} no-drag`}
+      title={label}
+      aria-label={label}
+      onClick={onReconnect}
+    />
+  );
 }
