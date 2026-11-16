@@ -69,5 +69,14 @@
             android:layout_marginTop="16dp"
             android:textColor="@color/warn"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/version"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:textColor="@color/text_muted"
+            android:textSize="13sp" />
     </LinearLayout>
 </ScrollView>

@@ -46,6 +46,10 @@ class WidgetEndToEndTest {
     private lateinit var token: String
     private lateinit var hostView: AppWidgetHostView
 
+    // Must stay referenced for the whole test: the system only holds a weak link to a widget host,
+    // so a garbage-collected host silently stops receiving widget updates.
+    private lateinit var host: AppWidgetHost
+
     private data class Row(val text: String, val struck: Boolean)
 
     @Before
@@ -155,7 +159,7 @@ class WidgetEndToEndTest {
 
     private fun placeWidgetOnTestHomeScreen() {
         val mgr = AppWidgetManager.getInstance(ctx)
-        val host = AppWidgetHost(ctx, 4242)
+        host = AppWidgetHost(ctx, 4242)
         val widgetId = host.allocateAppWidgetId()
         val bound = mgr.bindAppWidgetIdIfAllowed(widgetId, ComponentName(ctx, TodoWidgetProvider::class.java))
         assertTrue("allowed to bind the widget (run: adb shell appwidget grantbind ...)", bound)

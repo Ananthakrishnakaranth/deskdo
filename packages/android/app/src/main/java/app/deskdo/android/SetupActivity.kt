@@ -38,6 +38,7 @@ class SetupActivity : Activity() {
         findViewById<Button>(R.id.btn_battery_xiaomi).setOnClickListener { openFirst(xiaomiBatteryScreens()) }
         findViewById<Button>(R.id.btn_app_info).setOnClickListener { openFirst(listOf(appInfo())) }
         findViewById<Button>(R.id.btn_done).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.version).text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
     }
 
     override fun onResume() {

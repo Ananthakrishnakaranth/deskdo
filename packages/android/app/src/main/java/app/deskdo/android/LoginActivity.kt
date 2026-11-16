@@ -21,6 +21,8 @@ class LoginActivity : Activity() {
         val password = findViewById<EditText>(R.id.password)
         val error = findViewById<TextView>(R.id.error)
         val button = findViewById<Button>(R.id.sign_in)
+        // Visible right after installing, so it's clear which build is on the phone.
+        findViewById<TextView>(R.id.version).text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
 
         button.setOnClickListener {
             val url = server.text.toString().trim().trimEnd('/')

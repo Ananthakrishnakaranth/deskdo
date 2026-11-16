@@ -45,4 +45,5 @@
     <string name="setup_app_info_button">Open App info</string>
     <string name="setup_done">Done</string>
     <string name="setup_battery_xiaomi_button">Open Xiaomi battery saver</string>
+    <string name="version_label">DeskDo version %1$s</string>
 </resources>

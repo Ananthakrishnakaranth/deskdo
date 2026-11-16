@@ -200,8 +200,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          files=(dist/DeskDo-Android/DeskDo.apk)
-          notes="Built from ${GITHUB_SHA::7}. Android: install DeskDo.apk."
+          # The same APK under two names: a fixed one for a stable link, and one with the build
+          # number, so a fresh download can't be confused with an older DeskDo.apk on the phone.
+          cp dist/DeskDo-Android/DeskDo.apk "dist/DeskDo-${GITHUB_RUN_NUMBER}.apk"
+          files=(dist/DeskDo-Android/DeskDo.apk "dist/DeskDo-${GITHUB_RUN_NUMBER}.apk")
+          notes="Built from ${GITHUB_SHA::7}. Android: install DeskDo-${GITHUB_RUN_NUMBER}.apk (app version 1.0.${GITHUB_RUN_NUMBER})."
           if ls dist/DeskDo-Setup/DeskDo-Setup-*.exe >/dev/null 2>&1; then
             mv dist/DeskDo-Setup/DeskDo-Setup-*.exe dist/DeskDo-Setup.exe
             files+=(dist/DeskDo-Setup.exe)
