@@ -105,7 +105,10 @@ class WidgetEndToEndTest {
         if (!RefreshAlarm.inQuietHours()) {
             pushAs("laptop", create(UUID.randomUUID().toString(), "Seen by the alarm", 4.0))
             ctx.sendBroadcast(Intent(ctx, TodoWidgetProvider::class.java).setAction(RefreshAlarm.ACTION_TICK))
-            waitFor("alarm tick fetches the laptop's change") { rows().any { it.text == "Seen by the alarm" } }
+            // Must be this sync that brought it (not some other path): check what triggered it.
+            waitFor("alarm tick syncs and shows the laptop's change") {
+                Sync.lastTrigger == "alarm" && rows().any { it.text == "Seen by the alarm" }
+            }
         }
 
         // The in-app page reports its list through the JavaScript bridge: widget redraws at once.
@@ -153,6 +156,12 @@ class WidgetEndToEndTest {
             screenshot("app.png")
             assertEquals("no error was recorded", null, Diag.lastError(ctx))
         }
+        // Closing the screen must stop the page: no more reports from a page nobody can see.
+        Thread.sleep(1500)
+        val afterClose = WidgetStore.appReports.get()
+        pushAs("laptop", create(UUID.randomUUID().toString(), "After the app closed", 3.0))
+        Thread.sleep(3000)
+        assertEquals("page stopped reporting once the app screen was closed", afterClose, WidgetStore.appReports.get())
     }
 
     // ------------------------------------------------------------------ helpers

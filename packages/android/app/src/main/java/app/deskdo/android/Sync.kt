@@ -18,6 +18,11 @@ import java.util.concurrent.TimeUnit
 object Sync {
     private val running = Any()
 
+    /** What started the most recent successful sync in this process (tests, diagnostics). */
+    @Volatile
+    var lastTrigger: String? = null
+        private set
+
     /**
      * Sync right now on a background thread, without waiting for Android's job scheduler (which
      * Xiaomi and other phones can delay for a long time). If it can't finish (offline, server
@@ -62,6 +67,7 @@ object Sync {
             }
             WidgetStore.saveServerItems(ctx, Api.allItems(server, token, timeoutMs, info))
             WidgetStore.setStatus(ctx, SyncStatus.OK)
+            lastTrigger = trigger
         } catch (e: ApiException) {
             WidgetStore.setStatus(ctx, if (e.status == 401) SyncStatus.SIGNED_OUT else SyncStatus.OFFLINE)
         } catch (e: IOException) {

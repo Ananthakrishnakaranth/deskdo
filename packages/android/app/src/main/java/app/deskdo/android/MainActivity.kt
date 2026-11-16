@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -141,6 +142,16 @@ class MainActivity : Activity() {
             // You probably just changed the list: update the home-screen widget now.
             Sync.runNow(this, trigger = "pause")
         }
+    }
+
+    override fun onDestroy() {
+        // Stop the page (and its live connection) with the screen; otherwise it keeps running unseen
+        // for as long as the process happens to live.
+        if (::web.isInitialized) {
+            (web.parent as? ViewGroup)?.removeView(web)
+            web.destroy()
+        }
+        super.onDestroy()
     }
 
     @Deprecated("Deprecated in Java")

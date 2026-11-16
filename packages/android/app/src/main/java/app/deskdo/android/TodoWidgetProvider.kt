@@ -167,13 +167,15 @@ class TodoWidgetProvider : AppWidgetProvider() {
 
             // Row taps: one template for the whole list (must be MUTABLE so each row and each × can
             // fill in its item id and which action it is).
-            val rowTap = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_ROW)
+            // FLAG_RECEIVER_FOREGROUND: a tap on the widget is a user action, so it shouldn't wait in
+            // the background broadcast queue behind whatever else the phone is doing.
+            val rowTap = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_ROW).addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             views.setPendingIntentTemplate(
                 R.id.list,
                 PendingIntent.getBroadcast(ctx, 1, rowTap, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE),
             )
 
-            val refresh = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_REFRESH)
+            val refresh = Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_REFRESH).addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             views.setOnClickPendingIntent(
                 R.id.refresh,
                 PendingIntent.getBroadcast(ctx, 2, refresh, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),

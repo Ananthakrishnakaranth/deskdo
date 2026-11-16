@@ -155,6 +155,17 @@ The desktop app and PWA have no environment variables; the server URL is entered
 - **Tray icon:** click to show/hide. The menu has Show/Hide, Settings…, Start with Windows, and Quit. Closing the widget (Alt+F4) hides it to the tray.
 - **Move:** drag the title. **Resize:** drag the bottom-right corner. Transparent windows can't use native resize on Windows.
 
+## Android app and home-screen widget
+
+`packages/android` is a small Kotlin app: a native home-screen widget plus a WebView that runs the PWA (so the full UI isn't written twice). CI builds it and publishes `DeskDo.apk` (and the same file as `DeskDo-<build>.apk`) on the [latest release](https://github.com/Ananthakrishnakaranth/deskdo/releases/tag/latest).
+
+- **Widget:** shows the list, tap a row to tick it, × to delete, ↻ to refresh, + opens the app. The header shows when the list was last fetched (yellow when stale or offline).
+- **How it stays current:** instantly for changes made in the app (the page hands its list to the widget through a JavaScript bridge, including live changes from other devices while the app is open); on every widget tap; and in the background from an alarm about every 5 minutes, Android's own 30-minute widget update, and a WorkManager job. Background refresh pauses 01:00–06:00.
+- **Phones that stop background apps (Xiaomi/Redmi/POCO and others):** a stopped app's widget freezes (old list, dead buttons) until the app is opened. The app's *Keep the widget up to date* screen (shown once after adding the widget; also under long-press on the app icon → *Widget setup*) has buttons for the settings that prevent this: Autostart, *Allow background activity*, and the battery saver.
+- **Diagnosing from the server:** every request from the app's native code carries a short self-description (`X-DeskDo-Client`: app version, what triggered the sync, number of widgets, battery setting, why Android last killed the process, last error), and the server logs one line per API request. No task text or tokens are logged.
+- **Tests:** the `android-emulator` CI job runs the real app on an Android 13 emulator against a real server and database: the widget is placed on a test home screen and driven through the same RemoteViews and PendingIntents a launcher uses (sync on placement, refresh, tick, delete, alarm tick, the WebView page feeding the widget, the setup screen). Screenshots are published to the `ci-debug` release.
+- **Signing:** with the repository secrets `ANDROID_KEYSTORE_B64` and `ANDROID_KEYSTORE_PASSWORD` set, every build is signed with the same key and installs over the previous one. Without them each build gets a throwaway key and needs an uninstall first.
+
 ## Security notes
 - No secrets in the repo. The server reads them from env; `.env` is git-ignored.
 - Passwords are stored as bcrypt hashes. Login is rate-limited (10 failures per IP per 15 minutes).

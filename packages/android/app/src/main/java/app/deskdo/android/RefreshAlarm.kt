@@ -47,7 +47,7 @@ object RefreshAlarm {
 
     private fun pending(ctx: Context): PendingIntent = PendingIntent.getBroadcast(
         ctx, REQUEST_CODE,
-        Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_TICK),
+        Intent(ctx, TodoWidgetProvider::class.java).setAction(ACTION_TICK).addFlags(Intent.FLAG_RECEIVER_FOREGROUND),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 }
