@@ -61,6 +61,29 @@ describe("auth", () => {
   });
 });
 
+describe("request log", () => {
+  it("logs method, path, status and client type, but never tokens or the raw hint if malformed", async () => {
+    const lines: string[] = [];
+    const orig = console.log;
+    console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+    try {
+      const token = await login(h.baseUrl, "d1");
+      await fetch(`${h.baseUrl}/api/changes?since=7`, {
+        headers: { Authorization: `Bearer ${token}`, "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 14; Phone Build/X)", "X-DeskDo-Client": "v=12 trigger=refresh widgets=1" },
+      });
+      await fetch(`${h.baseUrl}/api/changes?since=0`, { headers: { Authorization: "Bearer nope", "X-DeskDo-Client": "<script>alert(1)</script>" } });
+      await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      console.log = orig;
+    }
+    const ok = lines.find((l) => l.includes("/api/changes since=7"))!;
+    expect(ok).toMatch(/^http GET \/api\/changes since=7 200 client=android-native\(android=14\) info="v=12 trigger=refresh widgets=1" \d+ms$/);
+    const bad = lines.find((l) => l.includes("/api/changes since=0"))!;
+    expect(bad).toMatch(/ 401 client=other \d+ms$/);
+    expect(lines.join("\n")).not.toMatch(/Bearer|eyJ|script/);
+  });
+});
+
 describe("validation", () => {
   it("rejects malformed ops with 400 and applies nothing", async () => {
     const token = await login(h.baseUrl, "d1");

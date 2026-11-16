@@ -141,6 +141,7 @@ export function createApp(cfg: Config, db: Db, opts: { pingIntervalMs?: number }
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname.startsWith("/api/") && req.method !== "OPTIONS") logRequest(req, res, url);
     try {
       if (url.pathname === "/healthz") return json(res, 200, { ok: true });
       if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
@@ -216,10 +217,28 @@ export function createApp(cfg: Config, db: Db, opts: { pingIntervalMs?: number }
 function describeClient(req: IncomingMessage): string {
   const ua = String(req.headers["user-agent"] ?? "");
   if (/Electron|DeskDo/i.test(ua)) return "desktop";
+  // The Android app's native code (home-screen widget sync, sign-in) uses the platform HTTP client.
+  if (/^Dalvik\//.test(ua)) return `android-native(android=${/Android (\d+)/.exec(ua)?.[1] ?? "?"})`;
   if (/; wv\)/.test(ua)) return "android-app";
   if (/Android|iPhone|iPad/.test(ua)) return "mobile-browser";
   if (/Mozilla/.test(ua)) return "browser";
   return "other";
+}
+
+/**
+ * One line per API request, so sync problems can be diagnosed from the server side: which kind of
+ * client called what, and how it went. Never logs tokens, cookies, bodies or task text.
+ * `x-deskdo-client` is an optional short self-description a client may send (app version, what
+ * triggered the sync); anything not matching a strict pattern is ignored.
+ */
+function logRequest(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  const started = Date.now();
+  res.on("finish", () => {
+    const since = url.pathname === "/api/changes" ? ` since=${Number(url.searchParams.get("since") ?? 0) || 0}` : "";
+    const hint = String(req.headers["x-deskdo-client"] ?? "");
+    const info = /^[\w=,.:+ -]{1,160}$/.test(hint) ? ` info="${hint}"` : "";
+    console.log(`http ${req.method} ${url.pathname}${since} ${res.statusCode} client=${describeClient(req)}${info} ${Date.now() - started}ms`);
+  });
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
