@@ -8,24 +8,43 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.text.format.DateFormat
+import android.text.format.DateUtils
 import android.widget.RemoteViews
 import android.widget.Toast
+import java.util.Date
 
 class TodoWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
         ids.forEach { mgr.updateAppWidget(it, buildViews(ctx, it)) }
-        mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+        notifyListChanged(mgr, ids)
         Sync.schedulePeriodic(ctx)
-        Sync.runNow(ctx)
+        RefreshAlarm.schedule(ctx)
+        Sync.runNow(ctx, trigger = "update")
     }
 
-    override fun onEnabled(ctx: Context) = Sync.schedulePeriodic(ctx)
+    override fun onEnabled(ctx: Context) {
+        Sync.schedulePeriodic(ctx)
+        RefreshAlarm.schedule(ctx)
+    }
 
-    override fun onDisabled(ctx: Context) = Sync.cancelPeriodic(ctx)
+    override fun onDisabled(ctx: Context) {
+        Sync.cancelPeriodic(ctx)
+        RefreshAlarm.cancel(ctx)
+    }
 
     override fun onReceive(ctx: Context, intent: Intent) {
-        super.onReceive(ctx, intent)
+        // Nothing here may crash the app: an exception is remembered and reported with the next sync.
+        try {
+            super.onReceive(ctx, intent)
+            handle(ctx, intent)
+        } catch (e: Exception) {
+            Diag.recordError(ctx, "widget", e)
+        }
+    }
+
+    private fun handle(ctx: Context, intent: Intent) {
         when (intent.action) {
             ACTION_ROW -> {
                 val id = intent.getStringExtra(EXTRA_ITEM_ID) ?: return
@@ -40,20 +59,27 @@ class TodoWidgetProvider : AppWidgetProvider() {
                     }
                 }
                 refreshAll(ctx) // show the change immediately, then sync right away
-                syncNow(ctx)
+                RefreshAlarm.schedule(ctx)
+                syncNow(ctx, "tap")
             }
             ACTION_REFRESH -> {
                 WidgetStore.setStatus(ctx, SyncStatus.SYNCING)
                 refreshAll(ctx)
-                syncNow(ctx)
+                RefreshAlarm.schedule(ctx)
+                syncNow(ctx, "refresh")
+            }
+            RefreshAlarm.ACTION_TICK -> {
+                if (Diag.widgetCount(ctx) <= 0) return // no widget on the home screen: let the chain end
+                RefreshAlarm.schedule(ctx)
+                if (!RefreshAlarm.inQuietHours()) syncNow(ctx, "alarm")
             }
         }
     }
 
     /** Sync now, keeping this receiver alive until done (goAsync allows several seconds). */
-    private fun syncNow(ctx: Context) {
+    private fun syncNow(ctx: Context, trigger: String) {
         val pending = goAsync()
-        Sync.runNow(ctx, timeoutMs = 8_000) { pending.finish() }
+        Sync.runNow(ctx, timeoutMs = 8_000, trigger = trigger) { pending.finish() }
     }
 
     companion object {
@@ -65,13 +91,32 @@ class TodoWidgetProvider : AppWidgetProvider() {
         const val ACTION_REFRESH = "app.deskdo.android.REFRESH"
         const val EXTRA_ITEM_ID = "itemId"
 
-        /** Redraw every placed widget from the local cache. */
+        /** After this long without a successful sync the "updated" time turns yellow. */
+        private const val STALE_MS = 45 * 60_000L
+
+        /** Redraw every placed widget from the local cache. Safe to call from any thread. */
         fun refreshAll(ctx: Context) {
-            val mgr = AppWidgetManager.getInstance(ctx)
-            val ids = mgr.getAppWidgetIds(ComponentName(ctx, TodoWidgetProvider::class.java))
-            if (ids.isEmpty()) return
-            ids.forEach { mgr.updateAppWidget(it, buildViews(ctx, it)) }
-            mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+            try {
+                val mgr = AppWidgetManager.getInstance(ctx)
+                val ids = mgr.getAppWidgetIds(ComponentName(ctx, TodoWidgetProvider::class.java))
+                if (ids.isEmpty()) return
+                ids.forEach { mgr.updateAppWidget(it, buildViews(ctx, it)) }
+                notifyListChanged(mgr, ids)
+            } catch (e: Exception) {
+                Diag.recordError(ctx, "render", e)
+            }
+        }
+
+        /** Only the Android 8–11 list (served by TodoWidgetService) needs to be told to re-read. */
+        @Suppress("DEPRECATION")
+        private fun notifyListChanged(mgr: AppWidgetManager, ids: IntArray) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+        }
+
+        /** "21:42" for today, "14 Nov" for older: when the list was last fetched from the server. */
+        private fun syncedLabel(ctx: Context, at: Long): String {
+            if (at <= 0) return ""
+            return if (DateUtils.isToday(at)) DateFormat.getTimeFormat(ctx).format(Date(at)) else DateFormat.format("d MMM", at).toString()
         }
 
         @Suppress("DEPRECATION") // setRemoteAdapter(Intent) still works on every API level we support
@@ -81,16 +126,20 @@ class TodoWidgetProvider : AppWidgetProvider() {
             val open = items.count { !it.done }
             views.setTextViewText(R.id.count, "$open/${WidgetStore.MAX_ACTIVE}")
 
+            // Next to the count: when the list was last fetched, or what's wrong. The time makes a
+            // frozen widget obvious (and tells us from a screenshot whether refreshes are happening).
             val status = WidgetStore.status(ctx)
-            views.setTextViewText(
-                R.id.status,
-                when (status) {
-                    SyncStatus.OK -> ""
-                    SyncStatus.SYNCING -> ctx.getString(R.string.status_syncing)
-                    SyncStatus.OFFLINE -> ctx.getString(R.string.status_offline)
-                    SyncStatus.SIGNED_OUT -> ctx.getString(R.string.status_signed_out)
-                },
-            )
+            val syncedAt = WidgetStore.syncedAt(ctx)
+            val updated = syncedLabel(ctx, syncedAt)
+            val statusText = when (status) {
+                SyncStatus.OK -> updated
+                SyncStatus.SYNCING -> ctx.getString(R.string.status_syncing)
+                SyncStatus.OFFLINE -> listOf(ctx.getString(R.string.status_offline), updated).filter { it.isNotEmpty() }.joinToString(" · ")
+                SyncStatus.SIGNED_OUT -> ctx.getString(R.string.status_signed_out)
+            }
+            val fresh = status == SyncStatus.OK && System.currentTimeMillis() - syncedAt < STALE_MS
+            views.setTextViewText(R.id.status, statusText)
+            views.setTextColor(R.id.status, ctx.getColor(if (fresh) R.color.text_muted else R.color.warn))
             views.setTextViewText(
                 R.id.empty,
                 ctx.getString(if (status == SyncStatus.SIGNED_OUT) R.string.empty_signed_out else R.string.empty_list),
@@ -130,7 +179,8 @@ class TodoWidgetProvider : AppWidgetProvider() {
                 PendingIntent.getBroadcast(ctx, 2, refresh, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),
             )
 
-            // "+" and the title open the full app (add, edit, reorder, delete).
+            // "+" and the title open the full app (add, edit, reorder, delete). Opening the app is
+            // also what revives a widget whose app the system had stopped.
             val openApp = PendingIntent.getActivity(
                 ctx, 3, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

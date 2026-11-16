@@ -71,7 +71,7 @@ class MainActivity : Activity() {
             thread {
                 val ok = try {
                     val cookies = CookieManager.getInstance()
-                    val set = Api.handoffCookies(server, token, timeoutMs = 20_000)
+                    val set = Api.handoffCookies(server, token, timeoutMs = 20_000, info = Diag.header(this, "handoff"))
                     set.forEach { cookies.setCookie(server, it) }
                     cookies.flush()
                     set.isNotEmpty()
@@ -87,7 +87,23 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::web.isInitialized) offerWidget()
+        if (!::web.isInitialized) return
+        // Opening the app is what brings a frozen widget back (a phone that stopped the app leaves
+        // the widget showing an old picture with dead buttons): redraw it now with fresh buttons,
+        // restart the background refresh, and fetch the latest list.
+        TodoWidgetProvider.refreshAll(this)
+        RefreshAlarm.schedule(this)
+        Sync.schedulePeriodic(this)
+        Sync.runNow(this, trigger = "open")
+        if (Diag.widgetCount(this) > 0) offerSetupOnce() else offerWidget()
+    }
+
+    /** Once per install, after the widget exists: the settings that keep it updating (see SetupActivity). */
+    private fun offerSetupOnce() {
+        val prefs = getSharedPreferences("deskdo_settings", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("setupShown", false)) return
+        prefs.edit().putBoolean("setupShown", true).apply()
+        startActivity(Intent(this, SetupActivity::class.java))
     }
 
     /**
@@ -99,7 +115,6 @@ class MainActivity : Activity() {
         val mgr = AppWidgetManager.getInstance(this)
         val provider = ComponentName(this, TodoWidgetProvider::class.java)
         val prefs = getSharedPreferences("deskdo_settings", Context.MODE_PRIVATE)
-        if (mgr.getAppWidgetIds(provider).isNotEmpty()) return
         if (prefs.getBoolean("widgetOfferDismissed", false) || offerShown) return
         if (!mgr.isRequestPinAppWidgetSupported) return
         offerShown = true
@@ -124,7 +139,7 @@ class MainActivity : Activity() {
         if (::web.isInitialized) {
             CookieManager.getInstance().flush()
             // You probably just changed the list: update the home-screen widget now.
-            Sync.runNow(this)
+            Sync.runNow(this, trigger = "pause")
         }
     }
 
@@ -138,7 +153,11 @@ class MainActivity : Activity() {
 class WidgetBridge(private val ctx: Context) {
     @JavascriptInterface
     fun onItemsChanged(json: String) {
-        if (json.length > 200_000) return
-        if (WidgetStore.saveFromApp(ctx, json)) TodoWidgetProvider.refreshAll(ctx)
+        try {
+            if (json.length > 200_000) return
+            if (WidgetStore.saveFromApp(ctx, json)) TodoWidgetProvider.refreshAll(ctx)
+        } catch (e: Exception) {
+            Diag.recordError(ctx, "bridge", e)
+        }
     }
 }

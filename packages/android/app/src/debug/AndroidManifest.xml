@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only (used by the emulator tests): plain-http access to the test server on the CI
+     machine, and an empty activity that plays the role of a home screen hosting the widget. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true">
+        <activity
+            android:name=".WidgetHostActivity"
+            android:exported="false" />
+    </application>
+</manifest>

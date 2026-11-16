@@ -17,6 +17,11 @@ android {
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = "1.0.${versionCode}"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        buildConfig = true // Diag reports BuildConfig.VERSION_CODE
     }
 
     signingConfigs {
@@ -53,4 +58,9 @@ android {
 
 dependencies {
     implementation("androidx.work:work-runtime:2.10.0")
+
+    // Instrumented tests (run on an emulator in CI: see ci/emulator-test.sh)
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

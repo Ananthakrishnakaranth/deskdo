@@ -53,8 +53,12 @@ object WidgetStore {
         }
         saveServerItems(ctx, items)
         setStatus(ctx, SyncStatus.OK)
+        appReports.incrementAndGet()
         true
     }
+
+    /** How many lists the in-app page has handed over since the process started (tests, diagnostics). */
+    val appReports = java.util.concurrent.atomic.AtomicInteger(0)
 
     fun outbox(ctx: Context): JSONArray = synchronized(lock) { JSONArray(p(ctx).getString("outbox", "[]")) }
 

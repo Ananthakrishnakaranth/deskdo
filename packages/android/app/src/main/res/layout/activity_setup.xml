@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/setup_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/setup_title"
+            android:textColor="@color/text"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:lineSpacingExtra="3dp"
+            android:text="@string/setup_intro"
+            android:textColor="@color/text_muted"
+            android:textSize="15sp" />
+
+        <LinearLayout
+            android:id="@+id/step_autostart"
+            style="@style/SetupStep">
+
+            <TextView style="@style/SetupStepTitle" android:text="@string/setup_autostart_title" />
+            <TextView style="@style/SetupStepText" android:text="@string/setup_autostart_text" />
+            <Button
+                android:id="@+id/btn_autostart"
+                style="@style/SetupButton"
+                android:text="@string/setup_autostart_button" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/SetupStep">
+
+            <TextView style="@style/SetupStepTitle" android:text="@string/setup_battery_title" />
+            <TextView
+                android:id="@+id/battery_text"
+                style="@style/SetupStepText"
+                android:text="@string/setup_battery_generic" />
+            <TextView
+                android:id="@+id/battery_state"
+                style="@style/SetupStepText"
+                android:textColor="@color/accent" />
+            <Button
+                android:id="@+id/btn_battery"
+                style="@style/SetupButton"
+                android:text="@string/setup_battery_button" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/SetupStep">
+
+            <TextView style="@style/SetupStepTitle" android:text="@string/setup_recents_title" />
+            <TextView
+                android:id="@+id/recents_text"
+                style="@style/SetupStepText"
+                android:text="@string/setup_recents_generic" />
+            <Button
+                android:id="@+id/btn_app_info"
+                style="@style/SetupButton"
+                android:text="@string/setup_app_info_button" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_done"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/button_bg"
+            android:text="@string/setup_done"
+            android:textAllCaps="false"
+            android:textColor="@color/background"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</ScrollView>

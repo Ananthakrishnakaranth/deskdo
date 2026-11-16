@@ -37,6 +37,9 @@ object Api {
     // Free-tier servers can take up to a minute to wake up.
     private const val TIMEOUT_MS = 70_000
 
+    /** Carries Diag.header(): a short, non-personal self-description the server logs. */
+    private const val CLIENT_HEADER = "X-DeskDo-Client"
+
     fun login(server: String, email: String, password: String, deviceId: String): String {
         val body = JSONObject()
             .put("email", email).put("password", password)
@@ -46,15 +49,15 @@ object Api {
     }
 
     /** Full current state (since=0), including tombstones. The list is tiny (≤ a few dozen rows). */
-    fun allItems(server: String, token: String, timeoutMs: Int = TIMEOUT_MS): List<Item> {
-        val res = JSONObject(request("GET", "$server/api/changes?since=0", token, null, timeoutMs))
+    fun allItems(server: String, token: String, timeoutMs: Int = TIMEOUT_MS, info: String? = null): List<Item> {
+        val res = JSONObject(request("GET", "$server/api/changes?since=0", token, null, timeoutMs, info))
         val arr = res.getJSONArray("items")
         return (0 until arr.length()).map { Item.fromJson(arr.getJSONObject(it)) }
     }
 
-    fun push(server: String, token: String, deviceId: String, ops: JSONArray, timeoutMs: Int = TIMEOUT_MS): JSONObject {
+    fun push(server: String, token: String, deviceId: String, ops: JSONArray, timeoutMs: Int = TIMEOUT_MS, info: String? = null): JSONObject {
         val body = JSONObject().put("deviceId", deviceId).put("ops", ops)
-        return JSONObject(request("POST", "$server/api/ops", token, body.toString(), timeoutMs))
+        return JSONObject(request("POST", "$server/api/ops", token, body.toString(), timeoutMs, info))
     }
 
     /**
@@ -62,7 +65,7 @@ object Api {
      * WebView can drop extra request headers once the web app's service worker controls the page.
      * Returns the raw Set-Cookie values (empty if the token was not accepted).
      */
-    fun handoffCookies(server: String, token: String, timeoutMs: Int = TIMEOUT_MS): List<String> {
+    fun handoffCookies(server: String, token: String, timeoutMs: Int = TIMEOUT_MS, info: String? = null): List<String> {
         val conn = URL("$server/api/handoff").openConnection() as HttpURLConnection
         try {
             conn.instanceFollowRedirects = false
@@ -70,6 +73,7 @@ object Api {
             conn.readTimeout = timeoutMs
             conn.useCaches = false
             conn.setRequestProperty("Authorization", "Bearer $token")
+            if (info != null) conn.setRequestProperty(CLIENT_HEADER, info)
             conn.responseCode // perform the request
             return conn.headerFields.entries
                 .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
@@ -79,7 +83,7 @@ object Api {
         }
     }
 
-    private fun request(method: String, url: String, token: String?, body: String?, timeoutMs: Int = TIMEOUT_MS): String {
+    private fun request(method: String, url: String, token: String?, body: String?, timeoutMs: Int = TIMEOUT_MS, info: String? = null): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
@@ -88,6 +92,7 @@ object Api {
             conn.useCaches = false
             conn.setRequestProperty("Accept", "application/json")
             if (token != null) conn.setRequestProperty("Authorization", "Bearer $token")
+            if (info != null) conn.setRequestProperty(CLIENT_HEADER, info)
             if (body != null) {
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json")
