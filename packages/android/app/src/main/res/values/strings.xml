@@ -30,18 +30,19 @@
     <string name="setup_shortcut">Widget setup</string>
     <string name="setup_title">Keep the widget up to date</string>
     <string name="setup_intro">Some phones stop apps that run in the background. When that happens to DeskDo, the home-screen widget freezes: it keeps showing old tasks and ignores taps until you open the app again. These settings prevent that. You only need to do this once.</string>
-    <string name="setup_autostart_title">1. Autostart</string>
+    <string name="setup_autostart_title">Autostart</string>
     <string name="setup_autostart_text">Find DeskDo in the list and switch it on.</string>
     <string name="setup_autostart_button">Open Autostart settings</string>
     <string name="setup_battery_title">Battery</string>
-    <string name="setup_battery_xiaomi">Choose “No restrictions” for DeskDo.</string>
-    <string name="setup_battery_generic">Allow DeskDo to run in the background (choose “Unrestricted” or “Allow”).</string>
-    <string name="setup_battery_ok">Android\'s battery setting: allowed ✓</string>
-    <string name="setup_battery_unknown">Android\'s battery setting: not allowed yet</string>
-    <string name="setup_battery_button">Open battery settings</string>
+    <string name="setup_battery_xiaomi">Allow background activity, then also set Xiaomi\'s Battery saver to “No restrictions”.</string>
+    <string name="setup_battery_generic">Allow DeskDo to run in the background. Without this, Android delays the widget\'s refresh for apps you rarely open.</string>
+    <string name="setup_battery_ok">Background activity: allowed ✓</string>
+    <string name="setup_battery_unknown">Background activity: not allowed yet</string>
+    <string name="setup_battery_button">Allow background activity</string>
     <string name="setup_recents_title">Don\'t swipe DeskDo away</string>
     <string name="setup_recents_xiaomi">Swiping DeskDo out of recent apps stops it. To protect it: open recent apps, long-press DeskDo and tap the lock. In App info, also turn off “Pause app activity if unused”.</string>
     <string name="setup_recents_generic">On some phones, swiping DeskDo out of recent apps stops it. In App info, also turn off “Pause app activity if unused”.</string>
     <string name="setup_app_info_button">Open App info</string>
     <string name="setup_done">Done</string>
+    <string name="setup_battery_xiaomi_button">Open Xiaomi battery saver</string>
 </resources>

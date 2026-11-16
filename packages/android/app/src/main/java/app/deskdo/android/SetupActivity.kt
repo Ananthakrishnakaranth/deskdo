@@ -29,11 +29,13 @@ class SetupActivity : Activity() {
 
         val xiaomi = isXiaomi()
         findViewById<View>(R.id.step_autostart).visibility = if (xiaomi) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.btn_battery_xiaomi).visibility = if (xiaomi) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.battery_text).setText(if (xiaomi) R.string.setup_battery_xiaomi else R.string.setup_battery_generic)
         findViewById<TextView>(R.id.recents_text).setText(if (xiaomi) R.string.setup_recents_xiaomi else R.string.setup_recents_generic)
 
         findViewById<Button>(R.id.btn_autostart).setOnClickListener { openFirst(autostartScreens()) }
-        findViewById<Button>(R.id.btn_battery).setOnClickListener { openFirst(batteryScreens(xiaomi)) }
+        findViewById<Button>(R.id.btn_battery).setOnClickListener { openFirst(androidBatteryScreens()) }
+        findViewById<Button>(R.id.btn_battery_xiaomi).setOnClickListener { openFirst(xiaomiBatteryScreens()) }
         findViewById<Button>(R.id.btn_app_info).setOnClickListener { openFirst(listOf(appInfo())) }
         findViewById<Button>(R.id.btn_done).setOnClickListener { finish() }
     }
@@ -55,15 +57,13 @@ class SetupActivity : Activity() {
         appInfo(),
     )
 
-    private fun batteryScreens(xiaomi: Boolean): List<Intent> {
+    /**
+     * Android's own "let this app run in the background" permission. Without it Android puts apps
+     * you rarely open into a low-priority bucket where their alarms and jobs are delayed for hours,
+     * so this is the one that matters most for the widget refreshing by itself.
+     */
+    private fun androidBatteryScreens(): List<Intent> {
         val list = ArrayList<Intent>()
-        if (xiaomi) {
-            // Xiaomi's per-app "Battery saver" page (choose "No restrictions").
-            list += Intent().setComponent(ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"))
-                .putExtra("package_name", packageName)
-                .putExtra("package_label", getString(R.string.app_name))
-        }
-        // Android's standard "let this app run in the background" prompt.
         if (!Diag.batteryUnrestricted(this)) {
             list += Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
         }
@@ -71,6 +71,14 @@ class SetupActivity : Activity() {
         list += appInfo()
         return list
     }
+
+    /** Xiaomi's separate per-app "Battery saver" page (choose "No restrictions"). */
+    private fun xiaomiBatteryScreens() = listOf(
+        Intent().setComponent(ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"))
+            .putExtra("package_name", packageName)
+            .putExtra("package_label", getString(R.string.app_name)),
+        appInfo(),
+    )
 
     /** Settings screens differ between phones and versions: open the first one that exists. */
     private fun openFirst(intents: List<Intent>) {

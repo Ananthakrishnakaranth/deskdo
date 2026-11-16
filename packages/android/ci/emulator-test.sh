@@ -13,10 +13,13 @@ adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell appwidget grantbind --package "$APP" --user 0 || { sleep 5; adb shell appwidget grantbind --package "$APP" --user 0; } \
   || { echo "::error::could not grant widget bind permission"; exit 1; }
 adb shell cat /proc/meminfo | head -3
+# Make the host's server reachable inside the emulator as http://localhost: browsers treat localhost
+# as a secure origin, which the web app needs (crypto.randomUUID, service worker), unlike 10.0.2.2.
+adb reverse "tcp:${SERVER_PORT}" "tcp:${SERVER_PORT}"
 adb logcat -c
 
 adb shell am instrument -w \
-  -e server "http://10.0.2.2:${SERVER_PORT}" -e email "$E2E_EMAIL" -e password "$E2E_PASSWORD" \
+  -e server "http://localhost:${SERVER_PORT}" -e email "$E2E_EMAIL" -e password "$E2E_PASSWORD" \
   "$APP.test/androidx.test.runner.AndroidJUnitRunner" | tee ci-out/instrument.txt
 
 echo "::group::Pending alarms for the app"

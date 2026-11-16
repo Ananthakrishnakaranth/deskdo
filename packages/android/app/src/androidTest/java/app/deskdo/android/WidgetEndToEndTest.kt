@@ -28,7 +28,7 @@ import java.util.UUID
 
 /**
  * Runs the real app on an Android emulator against a real DeskDo server (started by CI on the host,
- * reachable from the emulator at 10.0.2.2). The widget is placed on a test "home screen"
+ * reachable from the emulator as localhost through `adb reverse`). The widget is placed on a test "home screen"
  * (an AppWidgetHost inside WidgetHostActivity) and driven the way a launcher would: it receives the
  * widget's RemoteViews, and taps go through the same PendingIntents.
  *
@@ -39,7 +39,7 @@ class WidgetEndToEndTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
     private val ctx: Context = inst.targetContext
     private val args = InstrumentationRegistry.getArguments()
-    private val server: String = args.getString("server") ?: "http://10.0.2.2:18080"
+    private val server: String = args.getString("server") ?: "http://localhost:18080"
     private val email: String = args.getString("email") ?: "e2e@example.com"
     private val password: String = args.getString("password") ?: "e2e-password-123"
 
@@ -194,11 +194,21 @@ class WidgetEndToEndTest {
         assertTrue("view $id reacts to a tap", hostView.findViewById<View>(id).performClick())
     }
 
+    /**
+     * Tap inside a list row the way a launcher delivers it. A tap on the row itself is handled by
+     * the list's item-click listener (that's how RemoteViews wires setOnClickFillInIntent on a row's
+     * root view); a tap on a child such as × has its own click listener.
+     */
     private fun clickInRow(rowText: String, id: Int) = inst.runOnMainSync {
         val list = hostView.findViewById<ListView>(R.id.list)
-        val row = (0 until list.childCount).map { list.getChildAt(it) }
-            .first { it.findViewById<TextView>(R.id.text)?.text?.toString() == rowText }
-        assertTrue("'$rowText' reacts to a tap", row.findViewById<View>(id).performClick())
+        val index = (0 until list.childCount).first {
+            list.getChildAt(it).findViewById<TextView>(R.id.text)?.text?.toString() == rowText
+        }
+        val row = list.getChildAt(index)
+        val target = row.findViewById<View>(id)
+        val position = list.firstVisiblePosition + index
+        val handled = if (target === row) list.performItemClick(row, position, list.getItemIdAtPosition(position)) else target.performClick()
+        assertTrue("'$rowText' reacts to a tap", handled)
     }
 
     private fun waitFor(what: String, timeoutMs: Long = 20_000, condition: () -> Boolean) {
