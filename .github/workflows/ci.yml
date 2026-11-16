@@ -160,9 +160,13 @@ jobs:
       - name: Run app and widget on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 33 # Android 13, the version on the phone this app is used on
           arch: x86_64
           target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          heap-size: 512M
+          cores: 3
           disable-animations: true
           script: bash packages/android/ci/emulator-test.sh
       - name: Server log
